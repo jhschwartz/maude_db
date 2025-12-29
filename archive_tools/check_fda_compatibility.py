@@ -373,7 +373,8 @@ def main():
 
     args = parser.parse_args()
 
-    verbose = not args.quiet
+    # Disable verbose output if JSON mode is enabled (to ensure valid JSON output)
+    verbose = not args.quiet and not args.json
 
     checker = CompatibilityChecker(verbose=verbose, quick=args.quick)
     compatible = checker.run_all_checks()
