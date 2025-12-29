@@ -49,7 +49,54 @@ class MaudeDatabase:
         'text': 'foitext',
         'problems': 'foidevproblem'
     }
-    
+
+    # Table metadata defining file patterns, availability, and characteristics
+    TABLE_METADATA = {
+        'master': {
+            'file_prefix': 'mdrfoi',
+            'pattern_type': 'cumulative',  # Uses mdrfoithru{year}.zip
+            'start_year': 1991,
+            'current_year_prefix': 'mdrfoi',  # For current year: mdrfoi.zip
+            'size_category': 'large',
+            'description': 'Master records (adverse event reports)',
+            'date_column': 'date_received'  # For filtering cumulative files
+        },
+        'device': {
+            'file_prefix': 'foidev',
+            'pattern_type': 'yearly',  # Uses foidev{year}.zip
+            'start_year': 1998,
+            'current_year_prefix': 'device',  # For current year: device.zip
+            'size_category': 'medium',
+            'description': 'Device information'
+        },
+        'text': {
+            'file_prefix': 'foitext',
+            'pattern_type': 'yearly',  # Uses foitext{year}.zip
+            'start_year': 1996,
+            'current_year_prefix': 'foitext',  # For current year: foitext.zip
+            'size_category': 'medium',
+            'description': 'Event narrative text'
+        },
+        'patient': {
+            'file_prefix': 'patient',
+            'pattern_type': 'cumulative',  # Uses patientthru{year}.zip
+            'start_year': 1996,
+            'current_year_prefix': 'patient',  # For current year: patient.zip
+            'size_category': 'very_large',
+            'description': 'Patient demographics',
+            'size_warning': 'Patient data is distributed as a single large file (117MB compressed, 841MB uncompressed). All data will be downloaded even if you only need specific years.',
+            'date_column': 'date_of_event'  # For filtering cumulative files
+        },
+        'problems': {
+            'file_prefix': 'foidevproblem',
+            'pattern_type': 'yearly',
+            'start_year': 2019,  # Approximate - recent years only
+            'current_year_prefix': 'foidevproblem',
+            'size_category': 'small',
+            'description': 'Device problem codes'
+        }
+    }
+
 
     def __init__(self, db_path, verbose=True):
         """
@@ -75,45 +122,91 @@ class MaudeDatabase:
         self.conn.close()
     
 
-    def add_years(self, years, tables=None, download=False, strict=False, chunk_size=100000, data_dir='./maude_data'):
+    def add_years(self, years, tables=None, download=False, strict=False, chunk_size=100000, data_dir='./maude_data', interactive=True):
         """
         Add MAUDE data for specified years to database.
-        
+
         Args:
             years: Year or years to add. Can be:
                    - Single int: 2024
                    - List: [2020, 2021, 2022]
                    - String range: '2015-2024'
-                   - String: 'all', 'latest'
+                   - String: 'all', 'latest', 'current'
             tables: List of tables to include (default: all main tables)
             download: Whether to download files from FDA
             strict: If True, raise error on missing files. If False, skip with warning.
             chunk_size: Rows to process at once (for memory efficiency)
             data_dir: Directory containing data files
+            interactive: If True, prompt user for validation issues (default: True)
         """
-        years = self._parse_year_range(years)
-        
-        if tables is None: 
+        years_list = self._parse_year_range(years)
+
+        if tables is None:
             tables = ['master', 'device', 'patient', 'text']
-        
+
+        # Validate year/table compatibility
+        validation_result = self._validate_year_table_compatibility(years_list, tables)
+
+        # Handle interactive validation
+        if interactive and (validation_result['invalid'] or validation_result['warnings']):
+            proceed, valid_combinations = self._prompt_user_for_validation_resolution(validation_result)
+            if not proceed:
+                if self.verbose:
+                    print("\nOperation cancelled by user.")
+                return
+        else:
+            # Non-interactive mode: use only valid combinations
+            valid_combinations = validation_result['valid']
+
+            # In strict mode, raise error if any invalid combinations
+            if strict and validation_result['invalid']:
+                invalid_msgs = [f"{t} {y}: {r}" for y, t, r in validation_result['invalid']]
+                raise ValueError(f"Invalid year/table combinations:\n" + "\n".join(invalid_msgs))
+
+        # Group valid combinations by year for efficient processing
+        years_to_process = {}
+        for year, table in valid_combinations:
+            if year not in years_to_process:
+                years_to_process[year] = []
+            years_to_process[year].append(table)
+
         # Track which tables were actually loaded
         loaded_tables = set()
-        
-        for year in years:
-            if self.verbose:
-                print(f'\nProcessing year {year}...')                
+        current_year = datetime.now().year
 
-            for table in tables:
-                file_prefix = self.table_files[table]
-                
+        # Process each year
+        for year in sorted(years_to_process.keys()):
+            tables_for_year = years_to_process[year]
+
+            if self.verbose:
+                print(f'\nProcessing year {year}...')
+
+            for table in tables_for_year:
                 if download:
-                    if not self._download_file(year, file_prefix, data_dir):
-                        if strict:
-                            raise FileNotFoundError(f'Could not download {file_prefix}{year}')
-                        if self.verbose:
-                            print(f'  Skipping {table} {year} - download failed')
-                        continue
-                
+                    if not self._download_file(year, table, data_dir):
+                        # Try fallback for current year
+                        if year == current_year:
+                            if self.verbose:
+                                print(f'  Current year file not found, trying previous year as fallback...')
+                            # Try to download previous year instead
+                            if not self._download_file(year - 1, table, data_dir):
+                                if strict:
+                                    raise FileNotFoundError(f'Could not download {table} for {year} or {year-1}')
+                                if self.verbose:
+                                    print(f'  Skipping {table} {year} - download failed')
+                                continue
+                            else:
+                                # Successfully downloaded previous year, update year variable for file path
+                                year = year - 1
+                                if self.verbose:
+                                    print(f'  Using {year} data as fallback')
+                        else:
+                            if strict:
+                                raise FileNotFoundError(f'Could not download {table} {year}')
+                            if self.verbose:
+                                print(f'  Skipping {table} {year} - download failed')
+                            continue
+
                 path = self._make_file_path(table, year, data_dir)
                 if not path:
                     if strict:
@@ -121,51 +214,269 @@ class MaudeDatabase:
                     if self.verbose:
                         print(f'  Skipping {table} {year} - file not found')
                     continue
-                
+
                 if self.verbose:
                     print(f'  Loading {table}...')
-                
-                self._process_file(path, table, chunk_size)
+
+                # Handle cumulative files with year filtering
+                if table in self.TABLE_METADATA and self.TABLE_METADATA[table]['pattern_type'] == 'cumulative':
+                    self._process_cumulative_file(path, table, year, chunk_size)
+                else:
+                    self._process_file(path, table, chunk_size)
+
                 loaded_tables.add(table)
-        
+
         # Only create indexes for tables that were actually loaded
         self._create_indexes(list(loaded_tables))
-        
+
         if self.verbose:
             print('\nDatabase update complete')
 
 
+    def _construct_file_url(self, table, year):
+        """
+        Construct download URL based on table type and year.
+
+        Args:
+            table: Table name (e.g., 'master', 'device')
+            year: Year as integer
+
+        Returns:
+            tuple: (url, filename) or (None, None) if invalid
+        """
+        if table not in self.TABLE_METADATA:
+            return None, None
+
+        metadata = self.TABLE_METADATA[table]
+        pattern_type = metadata['pattern_type']
+        file_prefix = metadata['file_prefix']
+        current_year = datetime.now().year
+
+        # Current year files (no year suffix)
+        if year == current_year:
+            filename = f"{metadata['current_year_prefix']}.zip"
+            url = f"{self.base_url}/{filename}"
+            return url, filename
+
+        # Historical files
+        if pattern_type == 'yearly':
+            # Special case: device table changed naming in 2000
+            if table == 'device':
+                if year >= 2000:
+                    # 2000+: device2020.zip
+                    filename = f"device{year}.zip"
+                else:
+                    # 1998-1999: foidev1999.zip
+                    filename = f"{file_prefix}{year}.zip"
+            else:
+                # Standard yearly pattern: foitext2020.zip
+                filename = f"{file_prefix}{year}.zip"
+
+            url = f"{self.base_url}/{filename}"
+            return url, filename
+
+        elif pattern_type == 'cumulative':
+            # Cumulative pattern: mdrfoithru2020.zip
+            filename = f"{file_prefix}thru{year}.zip"
+            url = f"{self.base_url}/{filename}"
+            return url, filename
+
+        return None, None
+
     def _parse_year_range(self, year_str):
         """
         Convert year string to list of year integers.
-        
+
         Args:
-            year_str: String like '2015-2024', 'all', 'latest', or single year '2024'
-        
+            year_str: String like '2015-2024', 'all', 'latest', 'current', or single year '2024'
+
         Returns:
             List of year integers
         """
         if isinstance(year_str, int):
             return [year_str]
-        
+
         if isinstance(year_str, list):
             return year_str
-        
+
         if year_str == 'all':
-            return range(1991, datetime.now().year)
+            return list(range(1991, datetime.now().year + 1))
         elif year_str == 'latest':
             return [datetime.now().year - 1]
+        elif year_str == 'current':
+            return [datetime.now().year]
         elif '-' in year_str:
             start, end = year_str.split('-')
-            return range(int(start), int(end) + 1)
+            return list(range(int(start), int(end) + 1))
 
         return [int(year_str)]
 
-    
+    def _validate_year_table_compatibility(self, years, tables):
+        """
+        Validate that requested years are valid for requested tables.
+
+        Args:
+            years: List of year integers
+            tables: List of table names
+
+        Returns:
+            dict: {
+                'valid': [(year, table), ...],
+                'invalid': [(year, table, reason), ...],
+                'warnings': [(year, table, warning_msg), ...]
+            }
+        """
+        valid = []
+        invalid = []
+        warnings = []
+        current_year = datetime.now().year
+
+        for year in years:
+            for table in tables:
+                if table not in self.TABLE_METADATA:
+                    invalid.append((year, table, f"Unknown table '{table}'"))
+                    continue
+
+                metadata = self.TABLE_METADATA[table]
+                start_year = metadata['start_year']
+
+                # Check if year is too old
+                if year < start_year:
+                    invalid.append((
+                        year,
+                        table,
+                        f"{metadata['description']} only available from {start_year} onwards"
+                    ))
+                    continue
+
+                # Check if year is in the future
+                if year > current_year:
+                    invalid.append((
+                        year,
+                        table,
+                        f"Year {year} is in the future"
+                    ))
+                    continue
+
+                # Check if current year file might not exist yet (year transition)
+                if year == current_year:
+                    # Check if it's early in the year (before February)
+                    if datetime.now().month < 2:
+                        warnings.append((
+                            year,
+                            table,
+                            f"Current year ({current_year}) files may not be available yet. Will attempt download with fallback."
+                        ))
+
+                # Add size warnings for patient table
+                if table == 'patient' and 'size_warning' in metadata:
+                    # Only warn once per patient table request, not per year
+                    patient_warning = (
+                        year,
+                        table,
+                        metadata['size_warning']
+                    )
+                    if patient_warning not in warnings:
+                        warnings.append(patient_warning)
+
+                valid.append((year, table))
+
+        return {
+            'valid': valid,
+            'invalid': invalid,
+            'warnings': warnings
+        }
+
+    def _prompt_user_for_validation_resolution(self, validation_result):
+        """
+        Interactively prompt user to resolve validation issues.
+
+        Args:
+            validation_result: Output from _validate_year_table_compatibility
+
+        Returns:
+            tuple: (proceed: bool, filtered_valid: list of (year, table) tuples)
+        """
+        invalid = validation_result['invalid']
+        warnings = validation_result['warnings']
+        valid = validation_result['valid']
+
+        if not invalid and not warnings:
+            return True, valid
+
+        print("\n" + "="*60)
+        print("DATA AVAILABILITY VALIDATION")
+        print("="*60)
+
+        # Show invalid combinations
+        if invalid:
+            print("\nINVALID YEAR/TABLE COMBINATIONS:")
+            print("-" * 60)
+            for year, table, reason in invalid:
+                print(f"  X {table} {year}: {reason}")
+
+            print("\nThese combinations will be skipped.")
+            print("\nOptions:")
+            print("  1. Continue with valid combinations only")
+            print("  2. Abort and adjust your request")
+
+            while True:
+                choice = input("\nYour choice (1 or 2): ").strip()
+                if choice == '1':
+                    break
+                elif choice == '2':
+                    return False, []
+                else:
+                    print("  Invalid choice. Please enter 1 or 2.")
+
+        # Show warnings
+        if warnings:
+            print("\nWARNINGS:")
+            print("-" * 60)
+
+            # Group warnings by type
+            patient_warnings = [(y, t, w) for y, t, w in warnings if 'patient' in t.lower() and 'large file' in w.lower()]
+            other_warnings = [(y, t, w) for y, t, w in warnings if not ('patient' in t.lower() and 'large file' in w.lower())]
+
+            # Patient size warnings
+            if patient_warnings:
+                print("\nPATIENT TABLE SIZE WARNING:")
+                print(patient_warnings[0][2])  # Show warning message
+                print("\nDo you want to proceed with patient table download?")
+
+                while True:
+                    choice = input("Proceed? (y/n): ").strip().lower()
+                    if choice in ['y', 'yes']:
+                        break
+                    elif choice in ['n', 'no']:
+                        # Remove patient from valid list
+                        valid = [(y, t) for y, t in valid if t != 'patient']
+                        print("  Patient table removed from download list.")
+                        break
+                    else:
+                        print("  Invalid choice. Please enter y or n.")
+
+            # Other warnings
+            if other_warnings:
+                for year, table, warning in other_warnings:
+                    print(f"  ! {table} {year}: {warning}")
+                print("\nProceed despite warnings?")
+
+                while True:
+                    choice = input("(y/n): ").strip().lower()
+                    if choice in ['y', 'yes']:
+                        break
+                    elif choice in ['n', 'no']:
+                        return False, []
+                    else:
+                        print("  Invalid choice. Please enter y or n.")
+
+        return True, valid
+
+
     def _make_file_path(self, table, year, data_dir='./maude_data'):
         """
-        Create a path for the MAUDE datafile of a table type and year, returning only if it exists.
-        Tries both lowercase and uppercase table path prefix, e.g. "device2000.txt" and "DEVICE2000.txt"
+        Create a path for the MAUDE datafile, checking all possible naming patterns.
 
         Args:
             table: Table name (e.g., 'master', 'device')
@@ -176,70 +487,117 @@ class MaudeDatabase:
             path if it exists
             Otherwise returns False
         """
-        table_name = self.table_files[table]
+        if table not in self.TABLE_METADATA:
+            return False
 
-        # Check for exact filename match (case-sensitive) by listing directory
-        # This is needed because some filesystems (like macOS) are case-insensitive
-        # but we want to return the path with the correct casing
-        if os.path.exists(data_dir):
-            files_in_dir = os.listdir(data_dir)
+        metadata = self.TABLE_METADATA[table]
+        file_prefix = metadata['file_prefix']
+        pattern_type = metadata['pattern_type']
+        current_year = datetime.now().year
 
-            # Try lowercase first
-            lowercase_name = f"{table_name}{year}.txt"
-            if lowercase_name in files_in_dir:
-                return f"{data_dir}/{lowercase_name}"
+        if not os.path.exists(data_dir):
+            return False
 
-            # Try uppercase
-            uppercase_name = f"{table_name.upper()}{year}.txt"
-            if uppercase_name in files_in_dir:
-                return f"{data_dir}/{uppercase_name}"
+        files_in_dir = os.listdir(data_dir)
+
+        # Patterns to check (both lowercase and uppercase)
+        patterns = []
+
+        if year == current_year:
+            # Current year pattern: device.txt or DEVICE.txt
+            current_prefix = metadata['current_year_prefix']
+            patterns.extend([
+                f"{current_prefix}.txt",
+                f"{current_prefix.upper()}.txt"
+            ])
+
+        if pattern_type == 'yearly':
+            # Special case: device table changed naming in 2000
+            if table == 'device':
+                if year >= 2000:
+                    # 2000+: device2020.txt or DEVICE2020.txt
+                    patterns.extend([
+                        f"device{year}.txt",
+                        f"DEVICE{year}.txt"
+                    ])
+                else:
+                    # 1998-1999: foidev1999.txt or FOIDEV1999.txt
+                    patterns.extend([
+                        f"{file_prefix}{year}.txt",
+                        f"{file_prefix.upper()}{year}.txt"
+                    ])
+            else:
+                # Yearly pattern: foitext2020.txt
+                patterns.extend([
+                    f"{file_prefix}{year}.txt",
+                    f"{file_prefix.upper()}{year}.txt"
+                ])
+
+        elif pattern_type == 'cumulative':
+            # Cumulative pattern: mdrfoithru2020.txt
+            patterns.extend([
+                f"{file_prefix}thru{year}.txt",
+                f"{file_prefix.upper()}thru{year}.txt",
+                f"{file_prefix.upper()}THRU{year}.txt",
+                f"{file_prefix}Thru{year}.txt"
+            ])
+
+        # Check each pattern
+        for pattern in patterns:
+            if pattern in files_in_dir:
+                return f"{data_dir}/{pattern}"
 
         return False
 
 
-    def _download_file(self, year, file_prefix, data_dir='./maude_data'):
+    def _download_file(self, year, table, data_dir='./maude_data'):
         """
         Download and extract a MAUDE file from FDA.
-        
+
         Args:
             year: Year to download
-            file_prefix: File type prefix (e.g., 'mdrfoi', 'foidev')
+            table: Table name (e.g., 'master', 'device')
             data_dir: Directory to save files
-        
+
         Returns:
             True if successful, False otherwise
         """
         os.makedirs(data_dir, exist_ok=True)
-        
-        url = f"{self.base_url}/{file_prefix}{year}.zip"
-        zip_path = f"{data_dir}/{file_prefix}{year}.zip"
-        
+
+        url, filename = self._construct_file_url(table, year)
+        if not url:
+            if self.verbose:
+                print(f'  Cannot construct URL for {table} year {year}')
+            return False
+
+        zip_path = f"{data_dir}/{filename}"
+
         if os.path.exists(zip_path):
             if self.verbose:
-                print(f'  Using cached {file_prefix}{year}.zip')
+                print(f'  Using cached {filename}')
             try:
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                     zip_ref.extractall(data_dir)
                 return True
             except:
                 os.remove(zip_path)
-        
+
         try:
             if self.verbose:
-                print(f'  Downloading {file_prefix}{year}.zip...')
-            
+                print(f'  Downloading {filename}...')
+
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
             response = requests.get(url, headers=headers, timeout=30)
             response.raise_for_status()
-            
+
             with open(zip_path, 'wb') as f:
                 f.write(response.content)
-            
+
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(data_dir)
-            
+
             return True
-            
+
         except Exception as e:
             if self.verbose:
                 print(f'  Error downloading {year}: {e}')
@@ -270,17 +628,17 @@ class MaudeDatabase:
     def _process_file(self, filepath, table_name, chunk_size):
         """
         Read MAUDE text file and insert into SQLite database.
-        
+
         Args:
             filepath: Path to pipe-delimited text file
             table_name: Name of table to insert into
             chunk_size: Number of rows to process at once
         """
         total_rows = 0
-        
+
         for i, chunk in enumerate(pd.read_csv(
-            filepath, 
-            sep='|', 
+            filepath,
+            sep='|',
             encoding='latin1',
             on_bad_lines='skip',
             chunksize=chunk_size,
@@ -288,12 +646,75 @@ class MaudeDatabase:
         )):
             chunk.to_sql(table_name, self.conn, if_exists='append', index=False)
             total_rows += len(chunk)
-            
+
             if self.verbose and i % 10 == 0 and i > 0:
                 print(f'    Processed {total_rows:,} rows...')
-        
+
         if self.verbose:
             print(f'    Total: {total_rows:,} rows')
+
+    def _process_cumulative_file(self, filepath, table_name, year, chunk_size):
+        """
+        Read cumulative MAUDE file and insert only specified year into database.
+
+        For tables like master and patient that are distributed as cumulative files,
+        this filters to only include records from the specified year.
+
+        Args:
+            filepath: Path to pipe-delimited text file
+            table_name: Name of table to insert into
+            year: Year to filter for
+            chunk_size: Number of rows to process at once
+        """
+        total_rows = 0
+        filtered_rows = 0
+
+        # Get date column from metadata
+        if table_name not in self.TABLE_METADATA:
+            # Fallback to regular processing if we don't know the metadata
+            return self._process_file(filepath, table_name, chunk_size)
+
+        metadata = self.TABLE_METADATA[table_name]
+
+        if 'date_column' not in metadata:
+            # No date column defined, process entire file
+            return self._process_file(filepath, table_name, chunk_size)
+
+        date_col = metadata['date_column']
+
+        if self.verbose:
+            print(f'    Processing cumulative file, filtering for year {year}...')
+
+        for i, chunk in enumerate(pd.read_csv(
+            filepath,
+            sep='|',
+            encoding='latin1',
+            on_bad_lines='skip',
+            chunksize=chunk_size,
+            low_memory=False
+        )):
+            total_rows += len(chunk)
+
+            # Filter to specified year
+            if date_col in chunk.columns:
+                # Extract year from date column
+                chunk['_year'] = pd.to_datetime(chunk[date_col], errors='coerce').dt.year
+                chunk_filtered = chunk[chunk['_year'] == year]
+                chunk_filtered = chunk_filtered.drop(columns=['_year'])
+            else:
+                if self.verbose and i == 0:
+                    print(f'    Warning: Date column {date_col} not found, loading all data')
+                chunk_filtered = chunk
+
+            if len(chunk_filtered) > 0:
+                chunk_filtered.to_sql(table_name, self.conn, if_exists='append', index=False)
+                filtered_rows += len(chunk_filtered)
+
+            if self.verbose and i % 10 == 0 and i > 0:
+                print(f'    Scanned {total_rows:,} rows, kept {filtered_rows:,}...')
+
+        if self.verbose:
+            print(f'    Total: Scanned {total_rows:,} rows, loaded {filtered_rows:,} rows for year {year}')
 
 
     def _create_indexes(self, tables):

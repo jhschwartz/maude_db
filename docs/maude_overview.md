@@ -74,7 +74,7 @@ The MAUDE database is organized into several related tables. The `maude_db` libr
 - `sequence_number_treatment` - Treatment information
 - `sequence_number_outcome` - Patient outcome codes
 
-**Availability**: Individual year files from 1996-present
+**Availability**: Cumulative file only (`patientthru[year].zip`). Patient data is distributed as a single large file (117MB compressed, 841MB uncompressed) containing all historical records. The library filters this file to extract only the requested years.
 
 ### Device Problem Table (FOIDEVPROBLEM)
 
@@ -85,7 +85,7 @@ The MAUDE database is organized into several related tables. The `maude_db` libr
 - `DEVICE_SEQUENCE_NUMBER` - Which device (if multiple)
 - `DEVICE_PROBLEM_CODE` - Standardized problem code
 
-**Availability**: Available in recent years
+**Availability**: Individual year files from 2019-present (recent years only)
 
 ## Entity Relationships
 
@@ -129,15 +129,35 @@ The `maude_db` query methods handle this automatically.
 
 ## Data Availability by Year
 
-| Table | File Pattern | Years Available | Individual Files |
-|-------|-------------|-----------------|------------------|
-| Master (MDRFOI) | `mdrfoithru[year].zip` | 1991-present | No - comprehensive only |
-| Device (FOIDEV) | `foidev[year].zip` | 1998-present | Yes |
-| Text (FOITEXT) | `foitext[year].zip` | 1996-present | Yes |
-| Patient | `patient[year].zip` | 1996-present | Yes |
-| Device Problem | `foidevproblem[year].zip` | Recent years | Yes |
+| Table | Supported Years | File Pattern | Notes |
+|-------|----------------|--------------|-------|
+| Master (MDRFOI) | 1991-present | `mdrfoithru[year].zip` | Cumulative file only (~150MB), filtered by year automatically |
+| Device (FOIDEV) | **1998-present** | `foidev[year].zip` (1998-1999)<br>`device[year].zip` (2000-2024)<br>`device.zip` (2025) | Note: naming convention changed in 2000 |
+| Text (FOITEXT) | **1996-present** | `foitext[year].zip` | ~45MB per year |
+| Patient | **1996-present** | `patientthru[year].zip` | Cumulative file only (117MB compressed, 841MB uncompressed), filtered by year automatically |
+| Device Problem | **2019-present** | `foidevproblem[year].zip` | Recent years only |
 
-**Note**: The master table file (`mdrfoithru[year].zip`) contains all historical data and is very large (>1GB). The `maude_db` library currently does not download this file automatically. Individual year files are only available for device, text, and patient tables.
+### Current Year Support (2025)
+
+For the current year, files use yearless names:
+- `device.zip` instead of `device2025.zip`
+- `foitext.zip` instead of `foitext2025.zip`
+- `mdrfoi.zip` instead of `mdrfoithru2025.zip`
+- `patient.zip` instead of `patientthru2025.zip`
+
+### Legacy Data NOT Supported
+
+The library does **not** support legacy "thru" files that were used before individual year files existed:
+- `foidevthru1997.zip` - NOT supported
+- `foitextthru1995.zip` - NOT supported
+
+If you need data before the supported year ranges, you would need to manually download and process these legacy files.
+
+### Incremental Updates
+
+The library currently does **not** support monthly incremental update files (`*add.zip`, `*change.zip`). Only full year files are supported. For the most current data, use the current year yearless files (e.g., `device.zip` for 2025).
+
+The `maude_db` library automatically handles the different naming conventions and filters cumulative files to extract only the requested years.
 
 ## Understanding FDA Product Codes
 

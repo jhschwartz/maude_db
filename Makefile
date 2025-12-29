@@ -19,6 +19,24 @@ init-db: setup
 	@echo "Initializing MAUDE database..."
 	./init_full_db.sh
 
+check-fda:
+	@echo "Checking FDA MAUDE website compatibility..."
+	venv/bin/python archive_tools/check_fda_compatibility.py
+
+check-fda-quick:
+	@echo "Quick FDA compatibility check..."
+	venv/bin/python archive_tools/check_fda_compatibility.py --quick
+
+archive:
+	@echo "Preparing Zenodo archive (all years)..."
+	venv/bin/python archive_tools/prepare_zenodo_archive.py --years all --output maude_archive
+
+archive-recent:
+	@echo "Preparing Zenodo archive (last 5 years)..."
+	@CURRENT_YEAR=$$(date +%Y); \
+	START_YEAR=$$((CURRENT_YEAR - 4)); \
+	venv/bin/python archive_tools/prepare_zenodo_archive.py --years $$START_YEAR-$$CURRENT_YEAR --output maude_recent
+
 clean:
 	rm -rf venv
 	rm -rf maude_data/*.zip

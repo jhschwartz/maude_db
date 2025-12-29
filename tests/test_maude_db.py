@@ -30,37 +30,37 @@ class TestMaudeDatabase(unittest.TestCase):
     
     def _create_test_files(self):
         """Create sample MAUDE data files for testing"""
-        # Sample master file (mdrfoi)
+        # Sample master file (cumulative pattern: mdrfoithru2020.txt)
         master_data = """mdr_report_key|date_received|event_type|manufacturer_name
 1234567|2020-01-15|Injury|Test Manufacturer
 1234568|2020-02-20|Death|Another Manufacturer
 1234569|2020-03-10|Malfunction|Test Manufacturer"""
-        
-        with open(f'{self.test_data_dir}/mdrfoi2020.txt', 'w') as f:
+
+        with open(f'{self.test_data_dir}/mdrfoithru2020.txt', 'w') as f:
             f.write(master_data)
-        
-        # Sample device file (foidev) - using uppercase column names like real FDA data
+
+        # Sample device file (yearly pattern: device2020.txt for year >= 2000) - using uppercase column names like real FDA data
         device_data = """MDR_REPORT_KEY|DEVICE_REPORT_PRODUCT_CODE|GENERIC_NAME|BRAND_NAME
 1234567|NIQ|Thrombectomy Device|DeviceX
 1234568|NIQ|Thrombectomy Device|DeviceY
 1234569|ABC|Other Device|DeviceZ"""
-        
-        with open(f'{self.test_data_dir}/foidev2020.txt', 'w') as f:
+
+        with open(f'{self.test_data_dir}/device2020.txt', 'w') as f:
             f.write(device_data)
-        
-        # Sample patient file
+
+        # Sample patient file (cumulative pattern: patientthru2020.txt)
         patient_data = """mdr_report_key|patient_sequence_number|date_of_event
 1234567|1|2020-01-10
 1234568|1|2020-02-15"""
-        
-        with open(f'{self.test_data_dir}/patient2020.txt', 'w') as f:
+
+        with open(f'{self.test_data_dir}/patientthru2020.txt', 'w') as f:
             f.write(patient_data)
-        
-        # Sample text file - using uppercase column names like real FDA data
+
+        # Sample text file (yearly pattern: foitext2020.txt) - using uppercase column names like real FDA data
         text_data = """MDR_REPORT_KEY|MDR_TEXT_KEY|TEXT_TYPE_CODE|FOI_TEXT
 1234567|1|D|Patient experienced adverse event with device
 1234568|2|D|Fatal incident reported"""
-        
+
         with open(f'{self.test_data_dir}/foitext2020.txt', 'w') as f:
             f.write(text_data)
     
@@ -132,26 +132,26 @@ class TestMaudeDatabase(unittest.TestCase):
         db.close()
     
     # ========== File Path Tests ==========
-    
+
     def test_make_file_path_lowercase(self):
-        """Test finding lowercase file paths"""
+        """Test finding cumulative file paths (master table)"""
         db = MaudeDatabase(self.test_db, verbose=False)
         path = db._make_file_path('master', 2020, self.test_data_dir)
-        self.assertTrue(path.endswith('mdrfoi2020.txt'))
+        self.assertTrue(path.endswith('mdrfoithru2020.txt'))
         db.close()
-    
+
     def test_make_file_path_uppercase(self):
-        """Test finding uppercase file paths"""
-        # Create uppercase file
-        with open(f'{self.test_data_dir}/MDRFOI2021.txt', 'w') as f:
+        """Test finding uppercase cumulative file paths"""
+        # Create uppercase cumulative file
+        with open(f'{self.test_data_dir}/MDRFOITHRU2021.txt', 'w') as f:
             f.write('test')
 
         db = MaudeDatabase(self.test_db, verbose=False)
         path = db._make_file_path('master', 2021, self.test_data_dir)
         self.assertIsNotNone(path)
-        self.assertTrue(path.endswith('MDRFOI2021.txt'))
+        self.assertTrue(path.endswith('MDRFOITHRU2021.txt'))
         db.close()
-    
+
     def test_make_file_path_missing(self):
         """Test that missing files return False"""
         db = MaudeDatabase(self.test_db, verbose=False)
@@ -164,7 +164,7 @@ class TestMaudeDatabase(unittest.TestCase):
     def test_add_years_basic(self):
         """Test basic add_years functionality"""
         db = MaudeDatabase(self.test_db, verbose=False)
-        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir)
+        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir, interactive=False)
         
         # Check that data was added
         df = db.query("SELECT COUNT(*) as count FROM master")
@@ -180,7 +180,7 @@ class TestMaudeDatabase(unittest.TestCase):
         db = MaudeDatabase(self.test_db, verbose=False)
         
         with self.assertRaises(FileNotFoundError):
-            db.add_years(1999, tables=['master'], download=False, strict=True, data_dir=self.test_data_dir)
+            db.add_years(1999, tables=['master'], download=False, strict=True, data_dir=self.test_data_dir, interactive=False)
         
         db.close()
     
@@ -189,14 +189,14 @@ class TestMaudeDatabase(unittest.TestCase):
         db = MaudeDatabase(self.test_db, verbose=False)
         
         # Should not raise error
-        db.add_years(1999, tables=['master'], download=False, strict=False, data_dir=self.test_data_dir)
+        db.add_years(1999, tables=['master'], download=False, strict=False, data_dir=self.test_data_dir, interactive=False)
         
         db.close()
     
     def test_add_years_creates_indexes(self):
         """Test that indexes are created"""
         db = MaudeDatabase(self.test_db, verbose=False)
-        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir)
+        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir, interactive=False)
         
         # Check indexes exist
         indexes = pd.read_sql_query(
@@ -214,7 +214,7 @@ class TestMaudeDatabase(unittest.TestCase):
     def test_query_raw_sql(self):
         """Test raw SQL query execution"""
         db = MaudeDatabase(self.test_db, verbose=False)
-        db.add_years(2020, tables=['master'], download=False, data_dir=self.test_data_dir)
+        db.add_years(2020, tables=['master'], download=False, data_dir=self.test_data_dir, interactive=False)
 
         df = db.query("SELECT * FROM master WHERE event_type = 'Death'")
         self.assertEqual(len(df), 1)
@@ -225,7 +225,7 @@ class TestMaudeDatabase(unittest.TestCase):
     def test_query_with_params(self):
         """Test parameterized queries"""
         db = MaudeDatabase(self.test_db, verbose=False)
-        db.add_years(2020, tables=['master'], download=False, data_dir=self.test_data_dir)
+        db.add_years(2020, tables=['master'], download=False, data_dir=self.test_data_dir, interactive=False)
         
         df = db.query(
             "SELECT * FROM master WHERE event_type = :type",
@@ -238,7 +238,7 @@ class TestMaudeDatabase(unittest.TestCase):
     def test_query_device_by_name(self):
         """Test query_device with device name filter"""
         db = MaudeDatabase(self.test_db, verbose=False)
-        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir)
+        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir, interactive=False)
         
         df = db.query_device(device_name='Thrombectomy')
         self.assertEqual(len(df), 2)
@@ -248,7 +248,7 @@ class TestMaudeDatabase(unittest.TestCase):
     def test_query_device_by_product_code(self):
         """Test query_device with product code filter"""
         db = MaudeDatabase(self.test_db, verbose=False)
-        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir)
+        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir, interactive=False)
         
         df = db.query_device(product_code='NIQ')
         self.assertEqual(len(df), 2)
@@ -258,7 +258,7 @@ class TestMaudeDatabase(unittest.TestCase):
     def test_query_device_by_date_range(self):
         """Test query_device with date filters"""
         db = MaudeDatabase(self.test_db, verbose=False)
-        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir)
+        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir, interactive=False)
         
         df = db.query_device(start_date='2020-02-01', end_date='2020-12-31')
         self.assertEqual(len(df), 2)
@@ -268,7 +268,7 @@ class TestMaudeDatabase(unittest.TestCase):
     def test_query_device_multiple_filters(self):
         """Test query_device with multiple filters"""
         db = MaudeDatabase(self.test_db, verbose=False)
-        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir)
+        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir, interactive=False)
         
         df = db.query_device(
             device_name='Thrombectomy',
@@ -281,7 +281,7 @@ class TestMaudeDatabase(unittest.TestCase):
     def test_get_trends_by_year(self):
         """Test get_trends_by_year functionality"""
         db = MaudeDatabase(self.test_db, verbose=False)
-        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir)
+        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir, interactive=False)
         
         df = db.get_trends_by_year()
         self.assertEqual(len(df), 1)
@@ -295,7 +295,7 @@ class TestMaudeDatabase(unittest.TestCase):
     def test_get_trends_by_product_code(self):
         """Test get_trends_by_year with product code filter"""
         db = MaudeDatabase(self.test_db, verbose=False)
-        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir)
+        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir, interactive=False)
         
         df = db.get_trends_by_year(product_code='NIQ')
         self.assertEqual(df.iloc[0]['event_count'], 2)
@@ -305,7 +305,7 @@ class TestMaudeDatabase(unittest.TestCase):
     def test_get_narratives(self):
         """Test get_narratives functionality"""
         db = MaudeDatabase(self.test_db, verbose=False)
-        db.add_years(2020, tables=['text'], download=False, data_dir=self.test_data_dir)
+        db.add_years(2020, tables=['text'], download=False, data_dir=self.test_data_dir, interactive=False)
         
         df = db.get_narratives(['1234567', '1234568'])
         self.assertEqual(len(df), 2)
@@ -318,7 +318,7 @@ class TestMaudeDatabase(unittest.TestCase):
     def test_export_subset(self):
         """Test export_subset functionality"""
         db = MaudeDatabase(self.test_db, verbose=False)
-        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir)
+        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir, interactive=False)
         
         output_file = os.path.join(self.test_dir, 'export.csv')
         db.export_subset(output_file, device_name='Thrombectomy')
@@ -342,7 +342,7 @@ class TestMaudeDatabase(unittest.TestCase):
     def test_info_populated_database(self):
         """Test info on populated database"""
         db = MaudeDatabase(self.test_db, verbose=False)
-        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir)
+        db.add_years(2020, tables=['master', 'device'], download=False, data_dir=self.test_data_dir, interactive=False)
         # Should not raise error
         db.info()
         db.close()
@@ -359,7 +359,7 @@ class TestMaudeDatabase(unittest.TestCase):
     def test_get_years_in_db_populated(self):
         """Test getting years from populated database"""
         db = MaudeDatabase(self.test_db, verbose=False)
-        db.add_years(2020, tables=['master'], download=False, data_dir=self.test_data_dir)
+        db.add_years(2020, tables=['master'], download=False, data_dir=self.test_data_dir, interactive=False)
         
         years = db._get_years_in_db()
         self.assertIn(2020, years)
@@ -371,7 +371,7 @@ class TestMaudeDatabase(unittest.TestCase):
     def test_update_when_up_to_date(self):
         """Test update when database is current"""
         db = MaudeDatabase(self.test_db, verbose=False)
-        db.add_years(2020, tables=['master'], download=False, data_dir=self.test_data_dir)
+        db.add_years(2020, tables=['master'], download=False, data_dir=self.test_data_dir, interactive=False)
         
         # Mock _get_latest_available_year to return 2020
         original_method = db._get_latest_available_year
@@ -391,7 +391,7 @@ class TestMaudeDatabase(unittest.TestCase):
     def test_empty_table_list(self):
         """Test add_years with empty table list"""
         db = MaudeDatabase(self.test_db, verbose=False)
-        db.add_years(2020, tables=[], download=False, data_dir=self.test_data_dir)
+        db.add_years(2020, tables=[], download=False, data_dir=self.test_data_dir, interactive=False)
         
         tables = pd.read_sql_query(
             "SELECT name FROM sqlite_master WHERE type='table'",
@@ -404,8 +404,8 @@ class TestMaudeDatabase(unittest.TestCase):
     def test_duplicate_year_addition(self):
         """Test adding same year twice"""
         db = MaudeDatabase(self.test_db, verbose=False)
-        db.add_years(2020, tables=['master'], download=False, data_dir=self.test_data_dir)
-        db.add_years(2020, tables=['master'], download=False, data_dir=self.test_data_dir)
+        db.add_years(2020, tables=['master'], download=False, data_dir=self.test_data_dir, interactive=False)
+        db.add_years(2020, tables=['master'], download=False, data_dir=self.test_data_dir, interactive=False)
         
         # Should have duplicate rows
         df = db.query("SELECT COUNT(*) as count FROM master")

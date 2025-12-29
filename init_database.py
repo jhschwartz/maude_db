@@ -33,13 +33,16 @@ def estimate_download_size(years, tables):
     Returns:
         String with estimated size
     """
-    # Rough estimates (MB per year)
+    # Rough estimates (MB per year for yearly tables, total for cumulative)
     size_per_year = {
-        'device': 45,
-        'text': 45,
-        'patient': 10,
-        'master': 50  # Note: master is typically not year-specific
+        'device': 45,  # Yearly: ~45MB per year
+        'text': 45,    # Yearly: ~45MB per year
+        'patient': 117,  # Cumulative: 117MB total (one file for all years)
+        'master': 150   # Cumulative: ~150MB total (one file for all years)
     }
+
+    # Tables that are cumulative (not multiplied by year count)
+    cumulative_tables = {'patient', 'master'}
 
     # Parse years to get count
     if isinstance(years, str):
@@ -48,7 +51,7 @@ def estimate_download_size(years, tables):
             year_count = int(end) - int(start) + 1
         elif years == 'all':
             year_count = 30  # Approximate
-        elif years == 'latest':
+        elif years in ['latest', 'current']:
             year_count = 1
         else:
             year_count = 1
@@ -57,7 +60,14 @@ def estimate_download_size(years, tables):
     else:
         year_count = 1
 
-    total_mb = sum(size_per_year.get(table, 40) * year_count for table in tables)
+    total_mb = 0
+    for table in tables:
+        if table in cumulative_tables:
+            # Cumulative files: single download regardless of year count
+            total_mb += size_per_year.get(table, 100)
+        else:
+            # Yearly files: multiply by year count
+            total_mb += size_per_year.get(table, 40) * year_count
 
     if total_mb < 1024:
         return f"~{total_mb} MB"
@@ -111,13 +121,18 @@ def interactive_mode():
     print("=" * 60)
     print()
 
-    # Get year range
+    # Get year range with guidance
     print("Enter the year range to download:")
     print("  Examples:")
     print("    Single year: 2024")
     print("    Range: 2015-2024")
     print("    List: 2020,2021,2022")
-    print("    Special: 'latest' (most recent year) or 'all' (all available)")
+    print("    Special: 'latest' (most recent year), 'current' (current year), or 'all' (all available)")
+    print()
+    print("  Note: Different tables have different availability:")
+    print("    - Device data: 1998-present")
+    print("    - Text data: 1996-present")
+    print("    - Master/Patient data: 1991-present (large cumulative files)")
     print()
 
     while True:
@@ -128,11 +143,14 @@ def interactive_mode():
 
     print()
 
-    # Get table selection
+    # Get table selection with better warnings
     print("Select tables to download:")
     print("  1. device (device information - recommended, always included)")
     print("  2. text (event narratives)")
-    print("  3. patient (patient demographics)")
+    print("  3. patient (patient demographics - WARNING: large cumulative file)")
+    print()
+    print("  Note: Patient data requires downloading a large file (117MB compressed,")
+    print("        841MB uncompressed) even for a single year")
     print()
     print("  Enter numbers (comma-separated, e.g., '1,2') or 'all':")
 
@@ -174,7 +192,7 @@ def interactive_mode():
     return years, tables, output
 
 
-def download_and_initialize(years, tables, output_path, verbose=True):
+def download_and_initialize(years, tables, output_path, verbose=True, interactive=True):
     """
     Download data and initialize database.
 
@@ -183,6 +201,7 @@ def download_and_initialize(years, tables, output_path, verbose=True):
         tables: List of table names
         output_path: Path to output database file
         verbose: Whether to print progress
+        interactive: Whether to prompt for validation issues
     """
     print()
     print("=" * 60)
@@ -193,10 +212,11 @@ def download_and_initialize(years, tables, output_path, verbose=True):
     # Check if database already exists
     if os.path.exists(output_path):
         print(f"Warning: {output_path} already exists.")
-        overwrite = input("Overwrite? [y/N]: ").strip().lower()
-        if overwrite not in ['y', 'yes']:
-            print("\nCancelled. Please specify a different filename.")
-            sys.exit(0)
+        if interactive:
+            overwrite = input("Overwrite? [y/N]: ").strip().lower()
+            if overwrite not in ['y', 'yes']:
+                print("\nCancelled. Please specify a different filename.")
+                sys.exit(0)
         os.remove(output_path)
 
     # Create database and download
@@ -208,7 +228,8 @@ def download_and_initialize(years, tables, output_path, verbose=True):
             tables=tables,
             download=True,
             data_dir='./maude_data',
-            strict=False
+            strict=False,
+            interactive=interactive
         )
 
         print()
@@ -295,6 +316,12 @@ Examples:
         help='Suppress progress messages'
     )
 
+    parser.add_argument(
+        '--non-interactive',
+        action='store_true',
+        help='Disable interactive prompts for validation (skip invalid years silently)'
+    )
+
     args = parser.parse_args()
 
     # Determine mode
@@ -316,6 +343,7 @@ Examples:
             output += '.db'
 
         verbose = not args.quiet
+        interactive = not args.non_interactive
 
     else:
         # Interactive mode
@@ -326,9 +354,10 @@ Examples:
 
         years, tables, output = interactive_mode()
         verbose = True
+        interactive = True  # Always interactive for the prompts themselves
 
     # Download and initialize
-    download_and_initialize(years, tables, output, verbose=verbose)
+    download_and_initialize(years, tables, output, verbose=verbose, interactive=interactive)
 
 
 if __name__ == '__main__':

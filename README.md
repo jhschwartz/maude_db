@@ -3,6 +3,8 @@
 A Python library for downloading, querying, and analyzing FDA MAUDE (Manufacturer and User Facility Device Experience) adverse event data. Designed for medical device safety research and regulatory surveillance.
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![FDA Site Compatibility](https://img.shields.io/badge/FDA%20Site-status-yellow)](https://github.com/USERNAME/maude_db/actions/workflows/fda_compatibility_check.yml)
+<!-- Replace the badge above with your actual dynamic badge once set up - see docs/github_badge_setup.md -->
 
 ## What is maude_db?
 
@@ -125,6 +127,10 @@ pip install git+https://github.com/yourusername/maude_db.git
 - **[Research Guide](docs/research_guide.md)** - Best practices for medical device research
 - **[Troubleshooting](docs/troubleshooting.md)** - Solutions to common problems
 
+### Archiving & Maintenance
+- **[Archiving Guide](archive_tools/ARCHIVING_GUIDE.md)** - Complete guide for creating reproducible archives
+- **[GitHub Badge Setup](docs/github_badge_setup.md)** - Set up automatic FDA compatibility monitoring
+
 ## Examples
 
 The [`examples/`](examples/) directory contains working examples:
@@ -158,6 +164,50 @@ pytest -m integration
 
 All tests should pass. Integration tests require an internet connection and will download small amounts of real FDA data.
 
+## Archiving and Data Preservation
+
+### Create Zenodo Archive
+
+To create a complete archive suitable for upload to Zenodo or other research repositories:
+
+```bash
+# Using Makefile (recommended)
+make archive              # Full archive (all years)
+make archive-recent       # Last 5 years only
+
+# Or run the script directly
+python archive_tools/prepare_zenodo_archive.py --years all --output maude_full_archive
+
+# Or for specific years
+python archive_tools/prepare_zenodo_archive.py --years 2020-2024 --output maude_2020_2024
+```
+
+This creates a comprehensive archive including:
+- Complete SQLite database
+- Schema documentation
+- Metadata and statistics
+- SHA-256 checksums
+- DOI-ready README
+
+See [archive_tools/ARCHIVING_GUIDE.md](archive_tools/ARCHIVING_GUIDE.md) for detailed instructions.
+
+### Check FDA Site Compatibility
+
+Monitor whether the FDA MAUDE website structure has changed:
+
+```bash
+# Using Makefile (recommended)
+make check-fda           # Full check with test download
+make check-fda-quick     # Quick check (HEAD requests only)
+
+# Or run the script directly
+python archive_tools/check_fda_compatibility.py
+python archive_tools/check_fda_compatibility.py --quick
+python archive_tools/check_fda_compatibility.py --json
+```
+
+**Automated Monitoring:** Set up GitHub Actions to automatically check compatibility daily and display a status badge on your README. See [docs/github_badge_setup.md](docs/github_badge_setup.md) for setup instructions.
+
 ## Use Cases
 
 This library is designed for:
@@ -167,6 +217,7 @@ This library is designed for:
 - **Regulatory Research**: Analyze FDA reporting data for academic or policy studies
 - **Comparative Studies**: Compare safety profiles across different devices or manufacturers
 - **Signal Detection**: Screen for potential safety signals in medical devices
+- **Data Preservation**: Create reproducible archives for long-term research
 
 ## Contributing & Issues
 
@@ -206,6 +257,10 @@ This program is free software: you can redistribute it and/or modify it under th
 
 **Jacob Schwartz**
 jaschwa@umich.edu
+
+## Acknowledgments
+
+Documentation and testing development assisted by Claude (Anthropic AI).
 
 ---
 
