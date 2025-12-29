@@ -59,7 +59,7 @@ class MaudeDatabase:
         self.conn.close()
     
 
-    def add_years(self, years, tables=None, download=False, strict=False, chunk_size=100000):
+    def add_years(self, years, tables=None, download=False, strict=False, chunk_size=100000, data_dir='./maude_data'):
         """
         Add MAUDE data for specified years to database.
         
@@ -73,11 +73,15 @@ class MaudeDatabase:
             download: Whether to download files from FDA
             strict: If True, raise error on missing files. If False, skip with warning.
             chunk_size: Rows to process at once (for memory efficiency)
+            data_dir: Directory containing data files
         """
         years = self._parse_year_range(years)
         
         if tables is None: 
             tables = ['master', 'device', 'patient', 'text']
+        
+        # Track which tables were actually loaded
+        loaded_tables = set()
         
         for year in years:
             if self.verbose:
@@ -87,14 +91,14 @@ class MaudeDatabase:
                 file_prefix = self.table_files[table]
                 
                 if download:
-                    if not self._download_file(year, file_prefix):
+                    if not self._download_file(year, file_prefix, data_dir):
                         if strict:
                             raise FileNotFoundError(f'Could not download {file_prefix}{year}')
                         if self.verbose:
                             print(f'  Skipping {table} {year} - download failed')
                         continue
                 
-                path = self._make_file_path(table, year)
+                path = self._make_file_path(table, year, data_dir)
                 if not path:
                     if strict:
                         raise FileNotFoundError(f'No file found for table={table}, year={year}')
@@ -106,8 +110,10 @@ class MaudeDatabase:
                     print(f'  Loading {table}...')
                 
                 self._process_file(path, table, chunk_size)
+                loaded_tables.add(table)
         
-        self._create_indexes(tables)
+        # Only create indexes for tables that were actually loaded
+        self._create_indexes(list(loaded_tables))
         
         if self.verbose:
             print('\nDatabase update complete')
@@ -140,24 +146,38 @@ class MaudeDatabase:
         return [int(year_str)]
 
     
-    def _make_file_path(self, table, year):
+    def _make_file_path(self, table, year, data_dir='./maude_data'):
         """
         Create a path for the MAUDE datafile of a table type and year, returning only if it exists.
         Tries both lowercase and uppercase table path prefix, e.g. "device2000.txt" and "DEVICE2000.txt"
-        
+
+        Args:
+            table: Table name (e.g., 'master', 'device')
+            year: Year as integer
+            data_dir: Directory containing data files
+
         Returns:
             path if it exists
             Otherwise returns False
         """
         table_name = self.table_files[table]
-        path = f"./maude_data/{table_name}{year}.txt"
-        if os.path.exists(path):
-            return path 
-        
-        path = f"./maude_data/{table_name.upper()}{year}.txt"
-        if os.path.exists(path):
-            return path
-        
+
+        # Check for exact filename match (case-sensitive) by listing directory
+        # This is needed because some filesystems (like macOS) are case-insensitive
+        # but we want to return the path with the correct casing
+        if os.path.exists(data_dir):
+            files_in_dir = os.listdir(data_dir)
+
+            # Try lowercase first
+            lowercase_name = f"{table_name}{year}.txt"
+            if lowercase_name in files_in_dir:
+                return f"{data_dir}/{lowercase_name}"
+
+            # Try uppercase
+            uppercase_name = f"{table_name.upper()}{year}.txt"
+            if uppercase_name in files_in_dir:
+                return f"{data_dir}/{uppercase_name}"
+
         return False
 
 
@@ -263,6 +283,7 @@ class MaudeDatabase:
     def _create_indexes(self, tables):
         """
         Create indexes on commonly queried fields for performance.
+        Only creates indexes if the table actually exists.
         
         Args:
             tables: List of tables that were added
@@ -270,18 +291,24 @@ class MaudeDatabase:
         if self.verbose:
             print('\nCreating indexes...')
         
-        if 'master' in tables:
+        # Get list of existing tables
+        cursor = self.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )
+        existing_tables = {row[0] for row in cursor.fetchall()}
+        
+        if 'master' in tables and 'master' in existing_tables:
             self.conn.execute('CREATE INDEX IF NOT EXISTS idx_master_key ON master(mdr_report_key)')
             self.conn.execute('CREATE INDEX IF NOT EXISTS idx_master_date ON master(date_received)')
         
-        if 'device' in tables:
+        if 'device' in tables and 'device' in existing_tables:
             self.conn.execute('CREATE INDEX IF NOT EXISTS idx_device_key ON device(mdr_report_key)')
             self.conn.execute('CREATE INDEX IF NOT EXISTS idx_device_code ON device(product_code)')
         
-        if 'patient' in tables:
+        if 'patient' in tables and 'patient' in existing_tables:
             self.conn.execute('CREATE INDEX IF NOT EXISTS idx_patient_key ON patient(mdr_report_key)')
         
-        if 'text' in tables:
+        if 'text' in tables and 'text' in existing_tables:
             self.conn.execute('CREATE INDEX IF NOT EXISTS idx_text_key ON text(mdr_report_key)')
         
         self.conn.commit()
