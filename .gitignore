@@ -2,10 +2,14 @@
 __pycache__/
 *.py[cod]
 *.so
+*.egg-info/
+dist/
+build/
 
 # Virtual environments
 venv/
 env/
+.venv/
 
 # Environment variables
 .env
@@ -15,6 +19,20 @@ env/
 .idea/
 .DS_Store
 
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
 # Database files
 *.db
 *.sqlite
+
+# MAUDE data files
+maude_data/*.zip
+examples/*.db
+examples/*.csv
+examples/*.png
+examples/*.pdf
+examples/maude_data/
