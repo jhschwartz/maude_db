@@ -1053,7 +1053,7 @@ class MaudeDatabase:
         sql = f"""
             SELECT m.*, d.*
             FROM master m
-            JOIN device d ON m.mdr_report_key = d.mdr_report_key
+            JOIN device d ON m.MDR_REPORT_KEY = d.MDR_REPORT_KEY
             WHERE {where}
         """
 
@@ -1089,7 +1089,7 @@ class MaudeDatabase:
                 SUM(CASE WHEN m.EVENT_TYPE LIKE '%Injury%' THEN 1 ELSE 0 END) as injuries,
                 SUM(CASE WHEN m.EVENT_TYPE LIKE '%Malfunction%' THEN 1 ELSE 0 END) as malfunctions
             FROM master m
-            JOIN device d ON m.mdr_report_key = d.mdr_report_key
+            JOIN device d ON m.MDR_REPORT_KEY = d.MDR_REPORT_KEY
             WHERE {condition}
             GROUP BY year
             ORDER BY year

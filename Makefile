@@ -49,5 +49,6 @@ clean:
 	rm -f examples/*.csv
 	rm -f examples/*.png
 	rm -f examples/*.pdf
+	deactivate
 
 .DEFAULT_GOAL := setup

@@ -330,15 +330,15 @@ def create_indexes(conn, tables, verbose=False):
     existing_tables = {row[0] for row in cursor.fetchall()}
 
     if 'master' in tables and 'master' in existing_tables:
-        conn.execute('CREATE INDEX IF NOT EXISTS idx_master_key ON master(mdr_report_key)')
-        conn.execute('CREATE INDEX IF NOT EXISTS idx_master_date ON master(date_received)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_master_key ON master(MDR_REPORT_KEY)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_master_date ON master(DATE_RECEIVED)')
 
     if 'device' in tables and 'device' in existing_tables:
         conn.execute('CREATE INDEX IF NOT EXISTS idx_device_key ON device(MDR_REPORT_KEY)')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_device_code ON device(DEVICE_REPORT_PRODUCT_CODE)')
 
     if 'patient' in tables and 'patient' in existing_tables:
-        conn.execute('CREATE INDEX IF NOT EXISTS idx_patient_key ON patient(mdr_report_key)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_patient_key ON patient(MDR_REPORT_KEY)')
 
     if 'text' in tables and 'text' in existing_tables:
         conn.execute('CREATE INDEX IF NOT EXISTS idx_text_key ON text(MDR_REPORT_KEY)')
