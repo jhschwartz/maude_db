@@ -142,20 +142,25 @@ class TestMaudeDatabase(unittest.TestCase):
 
     def test_make_file_path_uppercase(self):
         """Test finding uppercase cumulative file paths"""
-        # Create uppercase cumulative file
-        with open(f'{self.test_data_dir}/MDRFOITHRU2021.txt', 'w') as f:
+        # Create uppercase cumulative file for current year - 1
+        current_year = datetime.now().year
+        cumulative_year = current_year - 1
+
+        with open(f'{self.test_data_dir}/MDRFOITHRU{cumulative_year}.txt', 'w') as f:
             f.write('test')
 
         db = MaudeDatabase(self.test_db, verbose=False)
-        path = db._make_file_path('master', 2021, self.test_data_dir)
+        path = db._make_file_path('master', cumulative_year, self.test_data_dir)
         self.assertIsNotNone(path)
-        self.assertTrue(path.endswith('MDRFOITHRU2021.txt'))
+        self.assertTrue(path.endswith(f'MDRFOITHRU{cumulative_year}.txt'))
         db.close()
 
     def test_make_file_path_missing(self):
         """Test that missing files return False"""
         db = MaudeDatabase(self.test_db, verbose=False)
-        path = db._make_file_path('master', 1999, self.test_data_dir)
+        # Use 'text' (yearly pattern) instead of 'master' (cumulative pattern)
+        # Year 1999 has no foitext1999.txt file, so should return False
+        path = db._make_file_path('text', 1999, self.test_data_dir)
         self.assertFalse(path)
         db.close()
     
@@ -178,10 +183,12 @@ class TestMaudeDatabase(unittest.TestCase):
     def test_add_years_strict_mode_failure(self):
         """Test that strict mode raises error on missing file"""
         db = MaudeDatabase(self.test_db, verbose=False)
-        
+
+        # Use 'text' table (yearly pattern) instead of 'master' (cumulative pattern)
+        # for year 1999 which doesn't have a corresponding foitext1999.txt file
         with self.assertRaises(FileNotFoundError):
-            db.add_years(1999, tables=['master'], download=False, strict=True, data_dir=self.test_data_dir, interactive=False)
-        
+            db.add_years(1999, tables=['text'], download=False, strict=True, data_dir=self.test_data_dir, interactive=False)
+
         db.close()
     
     def test_add_years_non_strict_mode(self):

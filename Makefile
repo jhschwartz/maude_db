@@ -3,7 +3,7 @@ PYTHON := python3.11
 setup:
 	$(PYTHON) -m venv venv
 	venv/bin/pip install --upgrade pip
-	venv/bin/pip install -r requirements.txt
+	venv/bin/pip install -e .
 
 install:
 	venv/bin/pip install -r requirements.txt
@@ -13,7 +13,7 @@ dev:
 	venv/bin/pip install -r requirements-dev.txt
 
 test:
-	venv/bin/python -m unittest discover tests -v
+	venv/bin/python -m pytest
 
 init-db: setup
 	@echo "Initializing MAUDE database..."
@@ -40,9 +40,10 @@ archive-recent:
 clean:
 	rm -rf venv
 	rm -rf maude_data/*.zip
-	rm -rf __pycache__ tests/__pycache__
+	rm -rf __pycache__ tests/__pycache__ src/maude_db/__pycache__
 	rm -f *.db
 	rm -rf .pytest_cache
+	rm -rf *.egg-info build dist .eggs
 	rm -rf examples/maude_data
 	rm -f examples/*.db
 	rm -f examples/*.csv

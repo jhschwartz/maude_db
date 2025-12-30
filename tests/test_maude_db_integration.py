@@ -186,11 +186,12 @@ class TestMaudeDatabaseIntegration(unittest.TestCase):
 
         # Try to download a year that doesn't exist, should skip without error
         db.add_years(
-            years=1980,  # Likely doesn't exist
+            years=1980,  # Doesn't exist (before 1991 start year)
             tables=['master'],
             download=True,
             strict=False,  # Don't raise error
-            data_dir=self.test_data_dir
+            data_dir=self.test_data_dir,
+            interactive=False  # Don't prompt in tests
         )
 
         # Database should still be functional even though no data was loaded
@@ -204,18 +205,21 @@ class TestMaudeDatabaseIntegration(unittest.TestCase):
         """Test that strict mode raises error on missing files"""
         db = MaudeDatabase(self.test_db, verbose=False)
 
-        # Should raise FileNotFoundError for non-existent year
-        with self.assertRaises(FileNotFoundError):
+        # Should raise ValueError for invalid year (before start year)
+        # Note: Year 1980 is before the master table start year of 1991, so this
+        # triggers validation error rather than file not found error
+        with self.assertRaises(ValueError):
             db.add_years(
-                years=1980,  # Likely doesn't exist
+                years=1980,  # Before 1991 start year
                 tables=['master'],
                 download=True,
                 strict=True,  # Should raise error
-                data_dir=self.test_data_dir
+                data_dir=self.test_data_dir,
+                interactive=False  # Don't prompt in tests
             )
 
         db.close()
-        print("✓ Strict mode correctly raises error on missing file")
+        print("✓ Strict mode correctly raises error on invalid year")
 
     def test_real_query_workflow(self):
         """Test a realistic end-to-end workflow with real data"""

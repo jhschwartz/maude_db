@@ -35,7 +35,11 @@ The MAUDE database is organized into several related tables. The `maude_db` libr
 - `manufacturer_name` - Name of device manufacturer
 - `report_source_code` - Source of report (manufacturer, user facility, etc.)
 
-**Availability**: Only available as a comprehensive file (`mdrfoithru[year].zip`). Individual year files are not provided by FDA.
+**Availability**: Only available as cumulative files:
+- Historical data: `mdrfoithru2024.zip` (all data through previous year)
+- Current year: `mdrfoi.zip` (current year data only)
+
+**Note**: The library automatically uses batch processing to efficiently extract requested years from the cumulative file in a single pass, providing ~29x speedup compared to naive year-by-year processing.
 
 ### Device Table (FOIDEV)
 
@@ -74,7 +78,11 @@ The MAUDE database is organized into several related tables. The `maude_db` libr
 - `sequence_number_treatment` - Treatment information
 - `sequence_number_outcome` - Patient outcome codes
 
-**Availability**: Cumulative file only (`patientthru[year].zip`). Patient data is distributed as a single large file (117MB compressed, 841MB uncompressed) containing all historical records. The library filters this file to extract only the requested years.
+**Availability**: Only available as cumulative files:
+- Historical data: `patientthru2024.zip` (all data through previous year)
+- Current year: `patient.zip` (current year data only)
+
+Patient data is distributed as a single large cumulative file (117MB compressed, 841MB uncompressed) containing all historical records. The library uses batch processing to efficiently filter this file and extract only the requested years in a single pass.
 
 ### Device Problem Table (FOIDEVPROBLEM)
 

@@ -12,7 +12,7 @@ Usage:
     # Non-interactive mode (command-line arguments)
     python init_database.py --years 2015-2024 --tables device,text --output maude.db
 
-Copyright (C) 2024 Jacob Schwartz, University of Michigan Medical School
+Copyright (C) 2026 Jacob Schwartz <jaschwa@umich.edu>
 Licensed under GPL v3
 """
 

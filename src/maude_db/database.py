@@ -1,5 +1,5 @@
-# maude_db.py - FDA MAUDE Database Interface
-# Copyright (C) 2024 Jacob Schwartz, University of Michigan Medical School
+# database.py - FDA MAUDE Database Interface
+# Copyright (C) 2026 Jacob Schwartz <jaschwa@umich.edu>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,95 +14,48 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+"""
+Main MaudeDatabase class for interfacing with FDA MAUDE data.
+
+This module provides the primary interface for downloading, managing, and querying
+FDA MAUDE (Manufacturer and User Facility Device Experience) database.
+"""
+
 import pandas as pd
 import sqlite3
 import os
 from datetime import datetime
 import requests
 import zipfile
+from collections import defaultdict
+
+from .metadata import TABLE_METADATA, FDA_BASE_URL
+from . import processors
 
 
 class MaudeDatabase:
     """
     Interface to FDA MAUDE database - handles download, parsing, and querying.
-    
+
     Usage:
         # Connect to existing database
         db = MaudeDatabase('maude.db')
-        
+
         # Add data
         db.add_years('2015-2024', tables=['master', 'device'], download=True)
-        
+
         # Query
         results = db.query_device(device_name='thrombectomy')
-        
+
         # Update with latest
         db.update()
     """
-    
-    base_url = "https://www.accessdata.fda.gov/MAUDE/ftparea"
-    
-    table_files = {
-        'master': 'mdrfoi',
-        'device': 'foidev',
-        'patient': 'patient',
-        'text': 'foitext',
-        'problems': 'foidevproblem'
-    }
-
-    # Table metadata defining file patterns, availability, and characteristics
-    TABLE_METADATA = {
-        'master': {
-            'file_prefix': 'mdrfoi',
-            'pattern_type': 'cumulative',  # Uses mdrfoithru{year}.zip
-            'start_year': 1991,
-            'current_year_prefix': 'mdrfoi',  # For current year: mdrfoi.zip
-            'size_category': 'large',
-            'description': 'Master records (adverse event reports)',
-            'date_column': 'date_received'  # For filtering cumulative files
-        },
-        'device': {
-            'file_prefix': 'foidev',
-            'pattern_type': 'yearly',  # Uses foidev{year}.zip
-            'start_year': 1998,
-            'current_year_prefix': 'device',  # For current year: device.zip
-            'size_category': 'medium',
-            'description': 'Device information'
-        },
-        'text': {
-            'file_prefix': 'foitext',
-            'pattern_type': 'yearly',  # Uses foitext{year}.zip
-            'start_year': 1996,
-            'current_year_prefix': 'foitext',  # For current year: foitext.zip
-            'size_category': 'medium',
-            'description': 'Event narrative text'
-        },
-        'patient': {
-            'file_prefix': 'patient',
-            'pattern_type': 'cumulative',  # Uses patientthru{year}.zip
-            'start_year': 1996,
-            'current_year_prefix': 'patient',  # For current year: patient.zip
-            'size_category': 'very_large',
-            'description': 'Patient demographics',
-            'size_warning': 'Patient data is distributed as a single large file (117MB compressed, 841MB uncompressed). All data will be downloaded even if you only need specific years.',
-            'date_column': 'date_of_event'  # For filtering cumulative files
-        },
-        'problems': {
-            'file_prefix': 'foidevproblem',
-            'pattern_type': 'yearly',
-            'start_year': 2019,  # Approximate - recent years only
-            'current_year_prefix': 'foidevproblem',
-            'size_category': 'small',
-            'description': 'Device problem codes'
-        }
-    }
-
 
     def __init__(self, db_path, verbose=True):
         """
         Initialize connection to MAUDE database.
         Creates new database if doesn't exist, connects to existing if it does.
-        
+
         Args:
             db_path: Path to SQLite database file
             verbose: Whether to print progress messages
@@ -110,17 +63,20 @@ class MaudeDatabase:
         self.db_path = db_path
         self.verbose = verbose
         self.conn = sqlite3.connect(self.db_path)
-    
+        self._download_cache = set()  # Track downloaded files to avoid re-downloading
+        self.TABLE_METADATA = TABLE_METADATA
+        self.base_url = FDA_BASE_URL
+
 
     def __enter__(self):
         """Context manager entry - allows 'with MaudeDatabase() as db:' syntax"""
         return self
-    
+
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit - clean up connection"""
         self.conn.close()
-    
+
 
     def add_years(self, years, tables=None, download=False, strict=False, chunk_size=100000, data_dir='./maude_data', interactive=True):
         """
@@ -163,74 +119,188 @@ class MaudeDatabase:
                 invalid_msgs = [f"{t} {y}: {r}" for y, t, r in validation_result['invalid']]
                 raise ValueError(f"Invalid year/table combinations:\n" + "\n".join(invalid_msgs))
 
-        # Group valid combinations by year for efficient processing
-        years_to_process = {}
-        for year, table in valid_combinations:
-            if year not in years_to_process:
-                years_to_process[year] = []
-            years_to_process[year].append(table)
+        # Extract just the years and tables from valid combinations
+        years_set = sorted(set(year for year, table in valid_combinations))
+        tables_set = sorted(set(table for year, table in valid_combinations))
 
         # Track which tables were actually loaded
         loaded_tables = set()
         current_year = datetime.now().year
 
-        # Process each year
-        for year in sorted(years_to_process.keys()):
-            tables_for_year = years_to_process[year]
+        # OPTIMIZATION: Group years by file for batch processing
+        if self.verbose:
+            print(f'\nGrouping years by file for optimization...')
+
+        file_groups = self._group_years_by_file(years_set, tables_set, data_dir)
+
+        # Download files first (with deduplication built into _download_file)
+        if download:
+            if self.verbose:
+                print(f'\nDownloading files...')
+
+            for (table, filepath, pattern_type), years_for_file in file_groups.items():
+                # Download for the first year in the group (others use same file)
+                year_to_download = years_for_file[0]
+
+                if not self._download_file(year_to_download, table, data_dir):
+                    # Try fallback for current year
+                    if year_to_download == current_year:
+                        if self.verbose:
+                            print(f'  Current year file not found for {table}, trying previous year...')
+                        if not self._download_file(year_to_download - 1, table, data_dir):
+                            if strict:
+                                raise FileNotFoundError(f'Could not download {table} for {year_to_download} or {year_to_download-1}')
+                            if self.verbose:
+                                print(f'  Skipping {table} - download failed')
+                            continue
+                    else:
+                        if strict:
+                            raise FileNotFoundError(f'Could not download {table} for {year_to_download}')
+                        if self.verbose:
+                            print(f'  Skipping {table} - download failed')
+                        continue
+
+        # Process files with batch optimization
+        if self.verbose:
+            print(f'\nProcessing data files...')
+
+        for (table, filepath, pattern_type), years_for_file in file_groups.items():
+            # Re-check file path in case download changed it
+            path = self._make_file_path(table, years_for_file[0], data_dir)
+
+            if not path:
+                if strict:
+                    raise FileNotFoundError(f'No file found for table={table}')
+                if self.verbose:
+                    print(f'  Skipping {table} - file not found')
+                continue
 
             if self.verbose:
-                print(f'\nProcessing year {year}...')
-
-            for table in tables_for_year:
-                if download:
-                    if not self._download_file(year, table, data_dir):
-                        # Try fallback for current year
-                        if year == current_year:
-                            if self.verbose:
-                                print(f'  Current year file not found, trying previous year as fallback...')
-                            # Try to download previous year instead
-                            if not self._download_file(year - 1, table, data_dir):
-                                if strict:
-                                    raise FileNotFoundError(f'Could not download {table} for {year} or {year-1}')
-                                if self.verbose:
-                                    print(f'  Skipping {table} {year} - download failed')
-                                continue
-                            else:
-                                # Successfully downloaded previous year, update year variable for file path
-                                year = year - 1
-                                if self.verbose:
-                                    print(f'  Using {year} data as fallback')
-                        else:
-                            if strict:
-                                raise FileNotFoundError(f'Could not download {table} {year}')
-                            if self.verbose:
-                                print(f'  Skipping {table} {year} - download failed')
-                            continue
-
-                path = self._make_file_path(table, year, data_dir)
-                if not path:
-                    if strict:
-                        raise FileNotFoundError(f'No file found for table={table}, year={year}')
-                    if self.verbose:
-                        print(f'  Skipping {table} {year} - file not found')
-                    continue
-
-                if self.verbose:
-                    print(f'  Loading {table}...')
-
-                # Handle cumulative files with year filtering
-                if table in self.TABLE_METADATA and self.TABLE_METADATA[table]['pattern_type'] == 'cumulative':
-                    self._process_cumulative_file(path, table, year, chunk_size)
+                if len(years_for_file) > 1:
+                    year_range = f"{min(years_for_file)}-{max(years_for_file)}"
+                    print(f'\nLoading {table} for years {year_range}...')
                 else:
-                    self._process_file(path, table, chunk_size)
+                    print(f'\nLoading {table} for year {years_for_file[0]}...')
 
-                loaded_tables.add(table)
+            # Get metadata for this table
+            metadata = self.TABLE_METADATA.get(table, {})
+
+            # BATCH PROCESSING OPTIMIZATION: Use batch method for cumulative files with multiple years
+            if pattern_type == 'cumulative' and len(years_for_file) > 1:
+                # Batch mode: process file once for all years
+                processors.process_cumulative_file_batch(
+                    path, table, years_for_file, metadata, self.conn, chunk_size, self.verbose
+                )
+            elif pattern_type == 'cumulative':
+                # Single year cumulative: use standard single-year method
+                processors.process_cumulative_file(
+                    path, table, years_for_file[0], metadata, self.conn, chunk_size, self.verbose
+                )
+            else:
+                # Yearly files: process each year separately
+                for year in years_for_file:
+                    year_path = self._make_file_path(table, year, data_dir)
+                    if year_path:
+                        if self.verbose and len(years_for_file) > 1:
+                            print(f'  Processing year {year}...')
+                        processors.process_file(year_path, table, self.conn, chunk_size, self.verbose)
+
+            loaded_tables.add(table)
 
         # Only create indexes for tables that were actually loaded
-        self._create_indexes(list(loaded_tables))
+        processors.create_indexes(self.conn, list(loaded_tables), self.verbose)
 
         if self.verbose:
             print('\nDatabase update complete')
+
+
+    def _predict_file_path(self, table, year, data_dir='./maude_data'):
+        """
+        Predict what file path will exist for a table/year after download.
+        Unlike _make_file_path, this doesn't check if the file currently exists.
+
+        Args:
+            table: Table name (e.g., 'master', 'device')
+            year: Year as integer
+            data_dir: Directory containing data files
+
+        Returns:
+            Predicted file path as string, or False if invalid table
+        """
+        if table not in self.TABLE_METADATA:
+            return False
+
+        metadata = self.TABLE_METADATA[table]
+        file_prefix = metadata['file_prefix']
+        pattern_type = metadata['pattern_type']
+        current_year = datetime.now().year
+
+        if pattern_type == 'yearly':
+            # Special case: device table changed naming in 2000
+            if table == 'device':
+                if year >= 2000:
+                    # 2000+: device2020.txt (lowercase from zip)
+                    return f"{data_dir}/device{year}.txt"
+                else:
+                    # 1998-1999: foidev1999.txt (lowercase from zip)
+                    return f"{data_dir}/{file_prefix}{year}.txt"
+            else:
+                # Standard yearly pattern: foitext2020.txt (lowercase from zip)
+                return f"{data_dir}/{file_prefix}{year}.txt"
+
+        elif pattern_type == 'cumulative':
+            # Cumulative files use latest available thru file
+            # After download, they'll be lowercase (from zip extraction)
+            if year == current_year:
+                return f"{data_dir}/{metadata['current_year_prefix']}.txt"
+            else:
+                # Use previous year's cumulative file for historical years
+                cumulative_year = current_year - 1
+                return f"{data_dir}/{file_prefix}thru{cumulative_year}.txt"
+
+        return False
+
+    def _group_years_by_file(self, years_list, tables, data_dir):
+        """
+        Group years that will use the same file for processing.
+
+        This enables batch processing optimization: when multiple years map to the same
+        cumulative file (e.g., mdrfoithru2024.txt), we can process the file once instead
+        of reading it separately for each year.
+
+        Args:
+            years_list: List of year integers
+            tables: List of table names
+            data_dir: Directory containing data files
+
+        Returns:
+            dict: Mapping of (table, filepath) -> list of years
+                  e.g., {('master', './maude_data/mdrfoithru2024.txt'): [1996, 1997, ..., 2024]}
+        """
+        file_groups = defaultdict(list)
+        current_year = datetime.now().year
+
+        for table in tables:
+            if table not in self.TABLE_METADATA:
+                continue
+
+            metadata = self.TABLE_METADATA[table]
+            pattern_type = metadata['pattern_type']
+
+            for year in years_list:
+                # First try to find existing file
+                file_path = self._make_file_path(table, year, data_dir)
+
+                # If no existing file, predict what the path will be after download
+                if not file_path:
+                    file_path = self._predict_file_path(table, year, data_dir)
+
+                if file_path:
+                    # Group by (table, filepath, pattern_type)
+                    key = (table, file_path, pattern_type)
+                    file_groups[key].append(year)
+
+        return file_groups
 
 
     def _construct_file_url(self, table, year):
@@ -276,8 +346,12 @@ class MaudeDatabase:
             return url, filename
 
         elif pattern_type == 'cumulative':
-            # Cumulative pattern: mdrfoithru2020.zip
-            filename = f"{file_prefix}thru{year}.zip"
+            # Cumulative files: use latest cumulative through previous year for historical data
+            # For current year, use current year file
+            # Historical: mdrfoithru2024.zip, patientthru2024.zip
+            # Current year: mdrfoi.zip, patient.zip
+            cumulative_year = current_year - 1
+            filename = f"{file_prefix}thru{cumulative_year}.zip"
             url = f"{self.base_url}/{filename}"
             return url, filename
 
@@ -534,18 +608,32 @@ class MaudeDatabase:
                 ])
 
         elif pattern_type == 'cumulative':
-            # Cumulative pattern: mdrfoithru2020.txt
-            patterns.extend([
-                f"{file_prefix}thru{year}.txt",
-                f"{file_prefix.upper()}thru{year}.txt",
-                f"{file_prefix.upper()}THRU{year}.txt",
-                f"{file_prefix}Thru{year}.txt"
-            ])
+            # Cumulative files: check for cumulative file
+            # For historical years, look for any cumulative file (e.g., mdrfoithru2024.txt, patientthru2020.txt)
+            # Try current year - 1 first, then search for any cumulative file
+            if year != current_year:
+                cumulative_year = current_year - 1
+                patterns.extend([
+                    f"{file_prefix}thru{cumulative_year}.txt",
+                    f"{file_prefix.upper()}thru{cumulative_year}.txt",
+                    f"{file_prefix.upper()}THRU{cumulative_year}.txt",
+                    f"{file_prefix}Thru{cumulative_year}.txt"
+                ])
 
         # Check each pattern
         for pattern in patterns:
             if pattern in files_in_dir:
                 return f"{data_dir}/{pattern}"
+
+        # For cumulative files, if we didn't find the expected year, search for ANY cumulative file
+        if pattern_type == 'cumulative' and year != current_year:
+            # Search for any file matching the cumulative pattern
+            for filename in files_in_dir:
+                lower_filename = filename.lower()
+                if (lower_filename.startswith(file_prefix) and
+                    'thru' in lower_filename and
+                    filename.endswith('.txt')):
+                    return f"{data_dir}/{filename}"
 
         return False
 
@@ -570,6 +658,13 @@ class MaudeDatabase:
                 print(f'  Cannot construct URL for {table} year {year}')
             return False
 
+        # Check download cache to avoid redundant downloads
+        cache_key = (table, filename, data_dir)
+        if cache_key in self._download_cache:
+            if self.verbose:
+                print(f'  Already downloaded {filename} in this session')
+            return True
+
         zip_path = f"{data_dir}/{filename}"
 
         if os.path.exists(zip_path):
@@ -578,6 +673,7 @@ class MaudeDatabase:
             try:
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                     zip_ref.extractall(data_dir)
+                self._download_cache.add(cache_key)  # Mark as downloaded
                 return True
             except:
                 os.remove(zip_path)
@@ -596,6 +692,7 @@ class MaudeDatabase:
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(data_dir)
 
+            self._download_cache.add(cache_key)  # Mark as downloaded
             return True
 
         except Exception as e:
@@ -607,148 +704,22 @@ class MaudeDatabase:
     def _check_file_exists(self, year, file_prefix):
         """
         Check if a file exists on FDA server without downloading.
-        
+
         Args:
             year: Year to check
             file_prefix: File type to check
-        
+
         Returns:
             True if file exists (status 200), False otherwise
         """
         url = f"{self.base_url}/{file_prefix}{year}.zip"
-        
+
         try:
             headers = {'User-Agent': 'Mozilla/5.0'}
             response = requests.head(url, headers=headers, timeout=5)
             return response.status_code == 200
         except:
             return False
-
-
-    def _process_file(self, filepath, table_name, chunk_size):
-        """
-        Read MAUDE text file and insert into SQLite database.
-
-        Args:
-            filepath: Path to pipe-delimited text file
-            table_name: Name of table to insert into
-            chunk_size: Number of rows to process at once
-        """
-        total_rows = 0
-
-        for i, chunk in enumerate(pd.read_csv(
-            filepath,
-            sep='|',
-            encoding='latin1',
-            on_bad_lines='skip',
-            chunksize=chunk_size,
-            low_memory=False
-        )):
-            chunk.to_sql(table_name, self.conn, if_exists='append', index=False)
-            total_rows += len(chunk)
-
-            if self.verbose and i % 10 == 0 and i > 0:
-                print(f'    Processed {total_rows:,} rows...')
-
-        if self.verbose:
-            print(f'    Total: {total_rows:,} rows')
-
-    def _process_cumulative_file(self, filepath, table_name, year, chunk_size):
-        """
-        Read cumulative MAUDE file and insert only specified year into database.
-
-        For tables like master and patient that are distributed as cumulative files,
-        this filters to only include records from the specified year.
-
-        Args:
-            filepath: Path to pipe-delimited text file
-            table_name: Name of table to insert into
-            year: Year to filter for
-            chunk_size: Number of rows to process at once
-        """
-        total_rows = 0
-        filtered_rows = 0
-
-        # Get date column from metadata
-        if table_name not in self.TABLE_METADATA:
-            # Fallback to regular processing if we don't know the metadata
-            return self._process_file(filepath, table_name, chunk_size)
-
-        metadata = self.TABLE_METADATA[table_name]
-
-        if 'date_column' not in metadata:
-            # No date column defined, process entire file
-            return self._process_file(filepath, table_name, chunk_size)
-
-        date_col = metadata['date_column']
-
-        if self.verbose:
-            print(f'    Processing cumulative file, filtering for year {year}...')
-
-        for i, chunk in enumerate(pd.read_csv(
-            filepath,
-            sep='|',
-            encoding='latin1',
-            on_bad_lines='skip',
-            chunksize=chunk_size,
-            low_memory=False
-        )):
-            total_rows += len(chunk)
-
-            # Filter to specified year
-            if date_col in chunk.columns:
-                # Extract year from date column
-                chunk['_year'] = pd.to_datetime(chunk[date_col], errors='coerce').dt.year
-                chunk_filtered = chunk[chunk['_year'] == year]
-                chunk_filtered = chunk_filtered.drop(columns=['_year'])
-            else:
-                if self.verbose and i == 0:
-                    print(f'    Warning: Date column {date_col} not found, loading all data')
-                chunk_filtered = chunk
-
-            if len(chunk_filtered) > 0:
-                chunk_filtered.to_sql(table_name, self.conn, if_exists='append', index=False)
-                filtered_rows += len(chunk_filtered)
-
-            if self.verbose and i % 10 == 0 and i > 0:
-                print(f'    Scanned {total_rows:,} rows, kept {filtered_rows:,}...')
-
-        if self.verbose:
-            print(f'    Total: Scanned {total_rows:,} rows, loaded {filtered_rows:,} rows for year {year}')
-
-
-    def _create_indexes(self, tables):
-        """
-        Create indexes on commonly queried fields for performance.
-        Only creates indexes if the table actually exists.
-        
-        Args:
-            tables: List of tables that were added
-        """
-        if self.verbose:
-            print('\nCreating indexes...')
-        
-        # Get list of existing tables
-        cursor = self.conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        )
-        existing_tables = {row[0] for row in cursor.fetchall()}
-        
-        if 'master' in tables and 'master' in existing_tables:
-            self.conn.execute('CREATE INDEX IF NOT EXISTS idx_master_key ON master(mdr_report_key)')
-            self.conn.execute('CREATE INDEX IF NOT EXISTS idx_master_date ON master(date_received)')
-        
-        if 'device' in tables and 'device' in existing_tables:
-            self.conn.execute('CREATE INDEX IF NOT EXISTS idx_device_key ON device(MDR_REPORT_KEY)')
-            self.conn.execute('CREATE INDEX IF NOT EXISTS idx_device_code ON device(DEVICE_REPORT_PRODUCT_CODE)')
-        
-        if 'patient' in tables and 'patient' in existing_tables:
-            self.conn.execute('CREATE INDEX IF NOT EXISTS idx_patient_key ON patient(mdr_report_key)')
-        
-        if 'text' in tables and 'text' in existing_tables:
-            self.conn.execute('CREATE INDEX IF NOT EXISTS idx_text_key ON text(MDR_REPORT_KEY)')
-        
-        self.conn.commit()
 
 
     def update(self):
@@ -758,7 +729,7 @@ class MaudeDatabase:
         """
         latest = self._get_latest_available_year()
         existing = self._get_years_in_db()
-        
+
         if latest not in existing:
             if self.verbose:
                 print(f'Updating with {latest} data...')
@@ -771,23 +742,23 @@ class MaudeDatabase:
     def _get_latest_available_year(self):
         """
         Find the most recent year available on FDA server.
-        
+
         Returns:
             Most recent year as integer
         """
         current_year = datetime.now().year
-        
+
         for year in range(current_year, 1990, -1):
             if self._check_file_exists(year, 'mdrfoi'):
                 return year
-        
+
         return current_year - 1
 
 
     def _get_years_in_db(self):
         """
         Get list of years currently in the database.
-        
+
         Returns:
             List of years (as integers)
         """
@@ -804,34 +775,34 @@ class MaudeDatabase:
     def query(self, sql, params=None):
         """
         Execute raw SQL query and return results as DataFrame.
-        
+
         Args:
             sql: SQL query string
             params: Optional parameters for query (for safety)
-        
+
         Returns:
             pandas DataFrame with results
         """
         return pd.read_sql_query(sql, self.conn, params=params)
 
 
-    def query_device(self, device_name=None, product_code=None, 
+    def query_device(self, device_name=None, product_code=None,
                      start_date=None, end_date=None):
         """
         Query device events with optional filters.
-        
+
         Args:
             device_name: Filter by generic_name or brand_name (partial match)
             product_code: Filter by exact product code
             start_date: Only events on/after this date
             end_date: Only events on/before this date
-        
+
         Returns:
             DataFrame with matching records from master + device tables
         """
         conditions = []
         params = {}
-        
+
         if device_name:
             conditions.append("(d.GENERIC_NAME LIKE :device OR d.BRAND_NAME LIKE :device)")
             params['device'] = f'%{device_name}%'
@@ -839,50 +810,50 @@ class MaudeDatabase:
         if product_code:
             conditions.append("d.DEVICE_REPORT_PRODUCT_CODE = :code")
             params['code'] = product_code
-        
+
         if start_date:
             conditions.append("m.date_received >= :start")
             params['start'] = start_date
-        
+
         if end_date:
             conditions.append("m.date_received <= :end")
             params['end'] = end_date
-        
+
         where = " AND ".join(conditions) if conditions else "1=1"
-        
+
         sql = f"""
             SELECT m.*, d.*
             FROM master m
             JOIN device d ON m.mdr_report_key = d.mdr_report_key
             WHERE {where}
         """
-        
+
         return pd.read_sql_query(sql, self.conn, params=params)
 
 
     def get_trends_by_year(self, product_code=None, device_name=None):
         """
         Get yearly event counts and breakdown by event type.
-        
+
         Args:
             product_code: Optional filter by product code
             device_name: Optional filter by device name
-        
+
         Returns:
             DataFrame with columns: year, event_count, deaths, injuries, malfunctions
         """
         condition = "1=1"
         params = {}
-        
+
         if product_code:
             condition = "d.DEVICE_REPORT_PRODUCT_CODE = :code"
             params['code'] = product_code
         elif device_name:
             condition = "(d.GENERIC_NAME LIKE :name OR d.BRAND_NAME LIKE :name)"
             params['name'] = f'%{device_name}%'
-        
+
         sql = f"""
-            SELECT 
+            SELECT
                 strftime('%Y', m.date_received) as year,
                 COUNT(*) as event_count,
                 SUM(CASE WHEN m.event_type LIKE '%Death%' THEN 1 ELSE 0 END) as deaths,
@@ -894,17 +865,17 @@ class MaudeDatabase:
             GROUP BY year
             ORDER BY year
         """
-        
+
         return pd.read_sql_query(sql, self.conn, params=params)
 
 
     def get_narratives(self, mdr_report_keys):
         """
         Get text narratives for specific report keys.
-        
+
         Args:
             mdr_report_keys: List of MDR report keys
-        
+
         Returns:
             DataFrame with mdr_report_key and narrative text
         """
@@ -915,21 +886,21 @@ class MaudeDatabase:
             FROM text
             WHERE MDR_REPORT_KEY IN ({placeholders})
         """
-        
+
         return pd.read_sql_query(sql, self.conn, params=mdr_report_keys)
 
 
     def export_subset(self, output_file, **filters):
         """
         Export filtered data to CSV file.
-        
+
         Args:
             output_file: Path for output CSV
             **filters: Keyword arguments passed to query_device()
         """
         df = self.query_device(**filters)
         df.to_csv(output_file, index=False)
-        
+
         if self.verbose:
             print(f'Exported {len(df):,} records to {output_file}')
 
@@ -941,33 +912,33 @@ class MaudeDatabase:
         """
         print(f"\nDatabase: {self.db_path}")
         print("=" * 60)
-        
+
         tables = pd.read_sql_query(
             "SELECT name FROM sqlite_master WHERE type='table'",
             self.conn
         )['name'].tolist()
-        
+
         if not tables:
             print("Database is empty")
             return
-        
+
         for table in tables:
             count = pd.read_sql_query(
                 f"SELECT COUNT(*) as count FROM {table}",
                 self.conn
             )['count'][0]
             print(f"{table:15} {count:,} records")
-        
+
         if 'master' in tables:
             date_info = pd.read_sql_query(
                 "SELECT MIN(date_received) as first, MAX(date_received) as last FROM master",
                 self.conn
             ).iloc[0]
             print(f"\nDate range: {date_info['first']} to {date_info['last']}")
-        
+
         db_size = os.path.getsize(self.db_path) / (1024**3)
         print(f"Database size: {db_size:.2f} GB")
-    
+
 
     def close(self):
         """Close database connection."""
