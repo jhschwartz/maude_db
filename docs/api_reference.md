@@ -219,8 +219,8 @@ df = db.query("""
 ```
 
 **Column Name Case**:
-- Device table: Use **uppercase** (`MDR_REPORT_KEY`, `GENERIC_NAME`, `BRAND_NAME`)
-- Master/patient tables: Use **lowercase** (`mdr_report_key`, `event_type`)
+- All MAUDE tables use **UPPERCASE** column names (`MDR_REPORT_KEY`, `GENERIC_NAME`, `BRAND_NAME`, `DATE_RECEIVED`, `EVENT_TYPE`)
+- This reflects the actual FDA data format
 
 **Notes**:
 - Always use parameterized queries for user input
@@ -286,7 +286,7 @@ count = len(db.query_device(device_name='stent'))
 
 # Get specific columns
 results = db.query_device(device_name='catheter')
-print(results[['GENERIC_NAME', 'BRAND_NAME', 'event_type']])
+print(results[['GENERIC_NAME', 'BRAND_NAME', 'EVENT_TYPE']])
 ```
 
 **Related**: `query()`, `get_trends_by_year()`, `export_subset()`
@@ -394,7 +394,7 @@ for idx, row in narratives.iterrows():
 results = db.query_device(device_name='pacemaker', start_date='2020-01-01')
 
 # 2. Filter to serious events
-serious = results[results['event_type'].str.contains('Death|Injury', na=False)]
+serious = results[results['EVENT_TYPE'].str.contains('Death|Injury', na=False)]
 
 # 3. Get narratives
 keys = serious['MDR_REPORT_KEY'].tolist()

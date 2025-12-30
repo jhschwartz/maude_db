@@ -764,7 +764,7 @@ class MaudeDatabase:
         """
         try:
             df = pd.read_sql_query(
-                "SELECT DISTINCT strftime('%Y', date_received) as year FROM master",
+                "SELECT DISTINCT strftime('%Y', DATE_RECEIVED) as year FROM master",
                 self.conn
             )
             return [int(y) for y in df['year'].tolist() if y]
@@ -812,11 +812,11 @@ class MaudeDatabase:
             params['code'] = product_code
 
         if start_date:
-            conditions.append("m.date_received >= :start")
+            conditions.append("m.DATE_RECEIVED >= :start")
             params['start'] = start_date
 
         if end_date:
-            conditions.append("m.date_received <= :end")
+            conditions.append("m.DATE_RECEIVED <= :end")
             params['end'] = end_date
 
         where = " AND ".join(conditions) if conditions else "1=1"
@@ -854,11 +854,11 @@ class MaudeDatabase:
 
         sql = f"""
             SELECT
-                strftime('%Y', m.date_received) as year,
+                strftime('%Y', m.DATE_RECEIVED) as year,
                 COUNT(*) as event_count,
-                SUM(CASE WHEN m.event_type LIKE '%Death%' THEN 1 ELSE 0 END) as deaths,
-                SUM(CASE WHEN m.event_type LIKE '%Injury%' THEN 1 ELSE 0 END) as injuries,
-                SUM(CASE WHEN m.event_type LIKE '%Malfunction%' THEN 1 ELSE 0 END) as malfunctions
+                SUM(CASE WHEN m.EVENT_TYPE LIKE '%Death%' THEN 1 ELSE 0 END) as deaths,
+                SUM(CASE WHEN m.EVENT_TYPE LIKE '%Injury%' THEN 1 ELSE 0 END) as injuries,
+                SUM(CASE WHEN m.EVENT_TYPE LIKE '%Malfunction%' THEN 1 ELSE 0 END) as malfunctions
             FROM master m
             JOIN device d ON m.mdr_report_key = d.mdr_report_key
             WHERE {condition}
@@ -931,7 +931,7 @@ class MaudeDatabase:
 
         if 'master' in tables:
             date_info = pd.read_sql_query(
-                "SELECT MIN(date_received) as first, MAX(date_received) as last FROM master",
+                "SELECT MIN(DATE_RECEIVED) as first, MAX(DATE_RECEIVED) as last FROM master",
                 self.conn
             ).iloc[0]
             print(f"\nDate range: {date_info['first']} to {date_info['last']}")

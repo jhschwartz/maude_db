@@ -29,7 +29,7 @@ TABLE_METADATA = {
         'current_year_prefix': 'mdrfoi',  # For current year: mdrfoi.zip
         'size_category': 'large',
         'description': 'Master records (adverse event reports)',
-        'date_column': 'date_received'  # For filtering cumulative files
+        'date_column': 'DATE_RECEIVED'  # For filtering cumulative files
     },
     'device': {
         'file_prefix': 'foidev',
@@ -54,8 +54,8 @@ TABLE_METADATA = {
         'current_year_prefix': 'patient',  # For current year: patient.zip
         'size_category': 'very_large',
         'description': 'Patient demographics',
-        'size_warning': 'Patient data is distributed as a single large file (117MB compressed, 841MB uncompressed). All data will be downloaded even if you only need specific years.',
-        'date_column': 'date_of_event'  # For filtering cumulative files
+        'size_warning': 'Patient data is distributed as a single large file (117MB compressed, 841MB uncompressed). All data will be downloaded even if you only need specific years.'
+        # Note: Patient table doesn't have a date column for filtering - it joins to master via mdr_report_key
     },
     'problems': {
         'file_prefix': 'foidevproblem',

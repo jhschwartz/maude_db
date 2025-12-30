@@ -30,8 +30,8 @@ class TestMaudeDatabase(unittest.TestCase):
     
     def _create_test_files(self):
         """Create sample MAUDE data files for testing"""
-        # Sample master file (cumulative pattern: mdrfoithru2020.txt)
-        master_data = """mdr_report_key|date_received|event_type|manufacturer_name
+        # Sample master file (cumulative pattern: mdrfoithru2020.txt) - using uppercase column names like real FDA data
+        master_data = """MDR_REPORT_KEY|DATE_RECEIVED|EVENT_TYPE|MANUFACTURER_NAME
 1234567|2020-01-15|Injury|Test Manufacturer
 1234568|2020-02-20|Death|Another Manufacturer
 1234569|2020-03-10|Malfunction|Test Manufacturer"""
@@ -48,8 +48,8 @@ class TestMaudeDatabase(unittest.TestCase):
         with open(f'{self.test_data_dir}/device2020.txt', 'w') as f:
             f.write(device_data)
 
-        # Sample patient file (cumulative pattern: patientthru2020.txt)
-        patient_data = """mdr_report_key|patient_sequence_number|date_of_event
+        # Sample patient file (cumulative pattern: patientthru2020.txt) - using uppercase column names like real FDA data
+        patient_data = """MDR_REPORT_KEY|PATIENT_SEQUENCE_NUMBER|DATE_OF_EVENT
 1234567|1|2020-01-10
 1234568|1|2020-02-15"""
 
@@ -223,23 +223,23 @@ class TestMaudeDatabase(unittest.TestCase):
         db = MaudeDatabase(self.test_db, verbose=False)
         db.add_years(2020, tables=['master'], download=False, data_dir=self.test_data_dir, interactive=False)
 
-        df = db.query("SELECT * FROM master WHERE event_type = 'Death'")
+        df = db.query("SELECT * FROM master WHERE EVENT_TYPE = 'Death'")
         self.assertEqual(len(df), 1)
-        self.assertEqual(df.iloc[0]['mdr_report_key'], 1234568)
+        self.assertEqual(df.iloc[0]['MDR_REPORT_KEY'], 1234568)
 
         db.close()
-    
+
     def test_query_with_params(self):
         """Test parameterized queries"""
         db = MaudeDatabase(self.test_db, verbose=False)
         db.add_years(2020, tables=['master'], download=False, data_dir=self.test_data_dir, interactive=False)
-        
+
         df = db.query(
-            "SELECT * FROM master WHERE event_type = :type",
+            "SELECT * FROM master WHERE EVENT_TYPE = :type",
             params={'type': 'Injury'}
         )
         self.assertEqual(len(df), 1)
-        
+
         db.close()
     
     def test_query_device_by_name(self):

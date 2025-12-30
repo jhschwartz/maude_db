@@ -202,8 +202,8 @@ db.query("SELECT MDR_REPORT_KEY, GENERIC_NAME FROM device")
 # Incorrect
 db.query("SELECT mdr_report_key, generic_name FROM device")  # Error!
 
-# Master/patient tables use lowercase
-db.query("SELECT mdr_report_key, event_type FROM master")  # Correct
+# All tables use uppercase
+db.query("SELECT MDR_REPORT_KEY, EVENT_TYPE FROM master")  # Correct
 
 # Use query methods to avoid case issues
 results = db.query_device(device_name='pacemaker')  # Handles case automatically
@@ -315,18 +315,18 @@ results = db.query_device(device_name='pacem')  # Partial match works
 
 ### Problem: Column name mismatch in joins
 
-**Cause**: Case differences between master (lowercase) and device (uppercase)
+**Cause**: Column name typos or missing tables
 
 **Solution**:
 
 ```python
-# Use lowercase mdr_report_key for joins
+# All columns use uppercase
 query = """
-    SELECT m.event_type, d.GENERIC_NAME
+    SELECT m.EVENT_TYPE, d.GENERIC_NAME
     FROM master m
-    JOIN device d ON m.mdr_report_key = d.MDR_REPORT_KEY
+    JOIN device d ON m.MDR_REPORT_KEY = d.MDR_REPORT_KEY
 """
-# Note: m.mdr_report_key (lowercase) = d.MDR_REPORT_KEY (uppercase)
+# Note: All columns use uppercase
 
 # Or use query methods which handle this
 results = db.query_device(device_name='catheter')  # Handles join correctly
@@ -369,11 +369,11 @@ filtered = all_data[...]  # Then filters in Python
 ```python
 # Make explicit copy
 results = db.query_device(device_name='catheter')
-subset = results[results['event_type'] == 'Death'].copy()  # .copy() here
+subset = results[results['EVENT_TYPE'] == 'Death'].copy()  # .copy() here
 subset['new_column'] = 'value'  # No warning
 
 # Or modify original
-results.loc[results['event_type'] == 'Death', 'new_column'] = 'value'
+results.loc[results['EVENT_TYPE'] == 'Death', 'new_column'] = 'value'
 ```
 
 ---
@@ -485,11 +485,11 @@ has_narrative = devices[devices['MDR_REPORT_KEY'].isin(narratives['MDR_REPORT_KE
 ```python
 # Check unique values
 results = db.query_device(device_name='pacemaker')
-print(results['event_type'].value_counts())
+print(results['EVENT_TYPE'].value_counts())
 print(results['GENERIC_NAME'].value_counts())
 
 # Clean data
-results['event_type'] = results['event_type'].fillna('Unknown')
+results['EVENT_TYPE'] = results['EVENT_TYPE'].fillna('Unknown')
 results = results[results['GENERIC_NAME'].notna()]
 
 # Standardize text
@@ -506,13 +506,13 @@ results['GENERIC_NAME'] = results['GENERIC_NAME'].str.lower().str.strip()
 
 ```python
 # Convert to datetime
-results['date_received'] = pd.to_datetime(results['date_received'], errors='coerce')
+results['DATE_RECEIVED'] = pd.to_datetime(results['DATE_RECEIVED'], errors='coerce')
 
 # Filter by date
-recent = results[results['date_received'] > '2020-01-01']
+recent = results[results['DATE_RECEIVED'] > '2020-01-01']
 
 # Handle invalid dates
-invalid_dates = results[results['date_received'].isna()]
+invalid_dates = results[results['DATE_RECEIVED'].isna()]
 print(f"Invalid dates: {len(invalid_dates)}")
 ```
 

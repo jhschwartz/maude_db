@@ -29,11 +29,11 @@ The MAUDE database is organized into several related tables. The `maude_db` libr
 **Purpose**: Core event-level information
 
 **Key columns**:
-- `mdr_report_key` - Unique identifier for each adverse event report
-- `date_received` - When FDA received the report
-- `event_type` - Type of event (Death, Injury, Malfunction, or combinations)
-- `manufacturer_name` - Name of device manufacturer
-- `report_source_code` - Source of report (manufacturer, user facility, etc.)
+- `MDR_REPORT_KEY` - Unique identifier for each adverse event report
+- `DATE_RECEIVED` - When FDA received the report
+- `EVENT_TYPE` - Type of event (Death, Injury, Malfunction, or combinations)
+- `MANUFACTURER_NAME` - Name of device manufacturer
+- `REPORT_SOURCE_CODE` - Source of report (manufacturer, user facility, etc.)
 
 **Availability**: Only available as cumulative files:
 - Historical data: `mdrfoithru2024.zip` (all data through previous year)
@@ -72,11 +72,11 @@ The MAUDE database is organized into several related tables. The `maude_db` libr
 **Purpose**: Patient demographic information
 
 **Key columns**:
-- `mdr_report_key` - Links to master table
-- `patient_sequence_number` - Multiple patients can be involved in one event
-- `date_of_event` - When adverse event occurred
-- `sequence_number_treatment` - Treatment information
-- `sequence_number_outcome` - Patient outcome codes
+- `MDR_REPORT_KEY` - Links to master table
+- `PATIENT_SEQUENCE_NUMBER` - Multiple patients can be involved in one event
+- `DATE_OF_EVENT` - When adverse event occurred
+- `SEQUENCE_NUMBER_TREATMENT` - Treatment information
+- `SEQUENCE_NUMBER_OUTCOME` - Patient outcome codes
 
 **Availability**: Only available as cumulative files:
 - Historical data: `patientthru2024.zip` (all data through previous year)
@@ -98,7 +98,7 @@ Patient data is distributed as a single large cumulative file (117MB compressed,
 ## Entity Relationships
 
 ```
-MASTER (mdr_report_key)
+MASTER (MDR_REPORT_KEY)
   |
   +-- DEVICE (MDR_REPORT_KEY) [1:many]
   |     |
@@ -106,7 +106,7 @@ MASTER (mdr_report_key)
   |
   +-- TEXT (MDR_REPORT_KEY) [1:many]
   |
-  +-- PATIENT (mdr_report_key) [1:many]
+  +-- PATIENT (MDR_REPORT_KEY) [1:many]
 ```
 
 One adverse event report (master) can involve:
@@ -117,23 +117,23 @@ One adverse event report (master) can involve:
 
 ## Important: Column Name Case
 
-**Critical for queries**: The actual FDA data files use **UPPERCASE** column names for some tables:
+**Critical for queries**: The actual FDA data files use **UPPERCASE** column names for all tables:
 
-- Device table: `MDR_REPORT_KEY`, `DEVICE_REPORT_PRODUCT_CODE`, `GENERIC_NAME`, `BRAND_NAME`
-- Text table: `MDR_REPORT_KEY`, `FOI_TEXT`
-- Master and patient tables: lowercase column names
+- All tables use uppercase: `MDR_REPORT_KEY`, `DEVICE_REPORT_PRODUCT_CODE`, `GENERIC_NAME`, `BRAND_NAME`, `DATE_RECEIVED`, `EVENT_TYPE`, `FOI_TEXT`, etc.
 
-When writing SQL queries directly, always use the correct case:
+When writing SQL queries directly, always use uppercase column names:
 
 ```python
-# Correct - uppercase for device table
+# Correct - uppercase column names
 db.query("SELECT GENERIC_NAME, BRAND_NAME FROM device")
+db.query("SELECT EVENT_TYPE, DATE_RECEIVED FROM master")
 
 # Incorrect - will fail
 db.query("SELECT generic_name FROM device")  # Error: no such column
+db.query("SELECT event_type FROM master")    # Error: no such column
 ```
 
-The `maude_db` query methods handle this automatically.
+The `maude_db` query methods handle joins automatically using the correct case.
 
 ## Data Availability by Year
 
