@@ -48,8 +48,11 @@ class MaudeDatabase:
         # Query
         results = db.query_device(device_name='thrombectomy')
 
-        # Update with latest
-        db.update()
+        # Update existing years and add new ones
+        db.update(add_new_years=True)
+
+        # Or just refresh existing years
+        db.update(add_new_years=False)
     """
 
     def __init__(self, db_path, verbose=True):
@@ -984,21 +987,59 @@ class MaudeDatabase:
         return self._check_url_exists(url)
 
 
-    def update(self):
+    def update(self, *, add_new_years, download=True):
         """
-        Add the most recent available year to database.
-        Checks what years are already in database and adds newest if missing.
+        Update existing years in database with latest FDA data.
+
+        Checks all years currently in the database and re-downloads them to catch
+        any corrections or updates from the FDA. Uses checksum tracking to skip
+        files that haven't changed, so unchanged data won't be reprocessed.
+
+        Args:
+            add_new_years: If True, also adds any missing years since the most
+                          recent year in database. If False, only refreshes
+                          existing years.
+            download: If True, download files from FDA. If False, use local files
+                     (default: True)
+
+        Example:
+            # Refresh existing data only
+            db.update(add_new_years=False)
+
+            # Refresh existing + add new years
+            db.update(add_new_years=True)
+
+            # Update from local files without downloading
+            db.update(add_new_years=False, download=False)
         """
-        latest = self._get_latest_available_year()
         existing = self._get_years_in_db()
 
-        if latest not in existing:
+        if not existing:
             if self.verbose:
-                print(f'Updating with {latest} data...')
-            self.add_years([latest], download=True)
+                print('Database is empty. Use add_years() to populate.')
+            return
+
+        years_to_process = existing.copy()
+
+        if add_new_years:
+            max_existing = max(existing)
+            current_year = datetime.now().year
+            new_years = list(range(max_existing + 1, current_year + 1))
+
+            if new_years:
+                years_to_process.extend(new_years)
+                if self.verbose:
+                    print(f'Will refresh {len(existing)} existing years and add {len(new_years)} new years')
+            else:
+                if self.verbose:
+                    print(f'Will refresh {len(existing)} existing years (no new years available)')
         else:
             if self.verbose:
-                print('Database is up to date')
+                print(f'Will refresh {len(existing)} existing years')
+
+        # Use force_refresh=False to let checksum tracking decide what needs updating
+        # This ensures only changed files are reprocessed
+        self.add_years(years_to_process, download=download, force_refresh=False, interactive=False)
 
 
     def _get_latest_available_year(self):

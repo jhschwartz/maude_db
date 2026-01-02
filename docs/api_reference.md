@@ -190,11 +190,13 @@ db.add_years(2020, tables=['device'], download=True)
 
 ---
 
-#### `update()`
+#### `update(add_new_years, download=True)`
 
-Add the most recent available year to database.
+Update existing years in database with latest FDA data.
 
-**Parameters**: None
+**Parameters**:
+- `add_new_years` (bool, required keyword-only): If True, also adds any missing years since the most recent year in database. If False, only refreshes existing years.
+- `download` (bool, optional): If True, download files from FDA. If False, use local files (default: True)
 
 **Returns**: None
 
@@ -202,14 +204,21 @@ Add the most recent available year to database.
 ```python
 db = MaudeDatabase('maude.db')
 
-# Add latest year if not already present
-db.update()
+# Refresh existing years only (check for FDA updates)
+db.update(add_new_years=False)
+
+# Refresh existing years AND add new years
+db.update(add_new_years=True)
+
+# Update from local files without downloading
+db.update(add_new_years=False, download=False)
 ```
 
 **Notes**:
-- Checks what years are already in database
-- Adds newest year from FDA if missing
-- Does nothing if already up to date
+- Uses checksum tracking to skip files that haven't changed
+- Only reprocesses data if FDA has updated source files
+- When `add_new_years=True`, fills all gaps from max existing year to current year
+- Returns early with message if database is empty
 - Requires internet connection
 
 **Related**: `add_years()`, `_get_latest_available_year()`, `_get_years_in_db()`

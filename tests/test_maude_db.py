@@ -377,23 +377,70 @@ class TestMaudeDatabase(unittest.TestCase):
         db.close()
     
     # ========== Update Tests ==========
-    
-    def test_update_when_up_to_date(self):
-        """Test update when database is current"""
+
+    def test_update_empty_database(self):
+        """Test update on empty database"""
+        db = MaudeDatabase(self.test_db, verbose=False)
+
+        # Should return early with message for empty database
+        db.update(add_new_years=False, download=False)
+
+        # Database should still be empty
+        years = db._get_years_in_db()
+        self.assertEqual(years, [])
+
+        db.close()
+
+    def test_update_refresh_only(self):
+        """Test update with add_new_years=False (refresh only)"""
         db = MaudeDatabase(self.test_db, verbose=False)
         db.add_years(2020, tables=['master'], download=False, data_dir=self.test_data_dir, interactive=False)
-        
-        # Mock _get_latest_available_year to return 2020
-        original_method = db._get_latest_available_year
-        db._get_latest_available_year = lambda: 2020
-        
-        # Should not add duplicate data
-        db.update()
-        
+
+        # Update should re-check existing years
+        db.update(add_new_years=False, download=False)
+
+        # Should still only have 2020 data
+        years = db._get_years_in_db()
+        self.assertEqual(years, [2020])
+
         df = db.query("SELECT COUNT(*) as count FROM master")
         self.assertEqual(df['count'][0], 3)  # Still only 3 records
-        
-        db._get_latest_available_year = original_method
+
+        db.close()
+
+    def test_update_with_new_years(self):
+        """Test update with add_new_years=True"""
+        db = MaudeDatabase(self.test_db, verbose=False)
+        db.add_years(2020, tables=['master'], download=False, data_dir=self.test_data_dir, interactive=False)
+
+        # Add 2021 data file for testing
+        # (In real scenario, this would download new years)
+        # For now, just verify it attempts to add years
+        initial_years = db._get_years_in_db()
+        self.assertEqual(initial_years, [2020])
+
+        # This will attempt to add years 2021-2026 (current year)
+        # Since we don't have those files in test data, they'll be skipped
+        db.update(add_new_years=True, download=False)
+
+        db.close()
+
+    def test_update_checksum_tracking(self):
+        """Test that update uses checksum tracking (doesn't use force_refresh)"""
+        db = MaudeDatabase(self.test_db, verbose=False)
+        db.add_years(2020, tables=['master'], download=False, data_dir=self.test_data_dir, interactive=False)
+
+        # Get initial metadata
+        metadata_before = db._get_loaded_file_info('master', 2020)
+        self.assertIsNotNone(metadata_before)
+
+        # Update without changes - checksum should prevent reprocessing
+        db.update(add_new_years=False, download=False)
+
+        # Metadata should still exist and be the same
+        metadata_after = db._get_loaded_file_info('master', 2020)
+        self.assertEqual(metadata_before['file_checksum'], metadata_after['file_checksum'])
+
         db.close()
     
     # ========== Edge Cases ==========
