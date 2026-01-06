@@ -2,15 +2,9 @@
 
 Interactive examples for the maude_db library. These notebooks demonstrate real research workflows for analyzing FDA MAUDE adverse event data.
 
-## Quick Start (No Installation Required)
+## Notebooks
 
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/yourusername/maude_db/main?filepath=notebooks%2F01_quickstart_binder.ipynb)
-
-**Try it now!** Click the badge above to launch the quickstart notebook in your browser. No installation needed - uses 2005 data (~10MB, ~1 min setup).
-
-## Local Notebooks
-
-For full functionality, run notebooks locally. They use recent data and demonstrate complete helper methods.
+Run notebooks locally to use recent data and demonstrate complete helper methods.
 
 ### Setup
 
@@ -32,19 +26,13 @@ jupyter notebook notebooks/
 
 Start here if you're new to maude_db:
 
-1. **[01_quickstart_binder.ipynb](01_quickstart_binder.ipynb)** ⚡ _Binder-ready_
-   - **Data**: 2005 device table (~10MB)
-   - **Runtime**: ~1 minute
-   - **Learn**: Database creation, basic SQL queries, CSV export
-   - **Best for**: Quick demos, first-time users
-
-2. **[02_getting_started.ipynb](02_getting_started.ipynb)**
+1. **[01_getting_started.ipynb](01_getting_started.ipynb)**
    - **Data**: 2022-2023, device + master (~300MB)
    - **Runtime**: ~4 minutes
    - **Learn**: Helper methods, event type breakdowns, multi-year downloads
    - **Best for**: Understanding the full API
 
-3. **[03_trend_analysis_visualization.ipynb](03_trend_analysis_visualization.ipynb)**
+2. **[02_trend_analysis_visualization.ipynb](02_trend_analysis_visualization.ipynb)**
    - **Data**: 2020-2023, device + master (~800MB)
    - **Runtime**: ~8 minutes
    - **Learn**: Temporal analysis, matplotlib visualizations, publication figures
@@ -54,19 +42,19 @@ Start here if you're new to maude_db:
 
 Dive deeper into specific analysis patterns:
 
-4. **[04_advanced_querying.ipynb](04_advanced_querying.ipynb)**
+3. **[03_advanced_querying.ipynb](03_advanced_querying.ipynb)**
    - **Data**: 2022-2023
    - **Runtime**: ~6 minutes
    - **Learn**: Complex SQL, multi-table joins, custom aggregations
    - **Best for**: Users comfortable with SQL
 
-5. **[05_manufacturer_comparison.ipynb](05_manufacturer_comparison.ipynb)**
+4. **[04_manufacturer_comparison.ipynb](04_manufacturer_comparison.ipynb)**
    - **Data**: 2020-2023
    - **Runtime**: ~8 minutes
    - **Learn**: Comparative analysis, statistical considerations
    - **Best for**: Safety surveillance, competitive intelligence
 
-8. **[08_helper_methods_reference.ipynb](08_helper_methods_reference.ipynb)**
+7. **[07_helper_methods_reference.ipynb](07_helper_methods_reference.ipynb)**
    - **Data**: 1998 + 2022 (demonstrations)
    - **Runtime**: ~5 minutes
    - **Learn**: Complete API reference with examples
@@ -76,13 +64,13 @@ Dive deeper into specific analysis patterns:
 
 For experienced researchers:
 
-6. **[06_signal_detection.ipynb](06_signal_detection.ipynb)**
+5. **[05_signal_detection.ipynb](05_signal_detection.ipynb)**
    - **Data**: 2020-2023
    - **Runtime**: ~10 minutes
    - **Learn**: Temporal spike detection, proportion analysis, statistical thresholds
    - **Best for**: Safety surveillance teams
 
-7. **[07_reproducible_research_workflow.ipynb](07_reproducible_research_workflow.ipynb)**
+6. **[06_reproducible_research_workflow.ipynb](06_reproducible_research_workflow.ipynb)**
    - **Data**: 2020-2023
    - **Runtime**: ~5 minutes
    - **Learn**: Publication best practices, data provenance, archiving
@@ -96,16 +84,16 @@ For experienced researchers:
 - Start: 01 → Done!
 
 **...analyze a specific device (30 min):**
-- Path: 01 → 02 → 03
+- Path: 01 → 02
 
 **...prepare a publication (2 hours):**
-- Path: 02 → 03 → 05 → 07
+- Path: 01 → 02 → 04 → 06
 
 **...do safety surveillance (advanced):**
-- Path: 02 → 03 → 05 → 06
+- Path: 01 → 02 → 04 → 05
 
 **...learn the complete API:**
-- Path: 02 → 08 → 04
+- Path: 01 → 07 → 03
 
 ## Data Download Notes
 
@@ -113,9 +101,8 @@ For experienced researchers:
 
 Notebooks download data from FDA on first run. Subsequent runs use cached data:
 
-- **Notebook 01**: ~1 min (10MB)
-- **Notebook 02**: ~4 min (300MB)
-- **Notebook 03-08**: ~8-10 min first run (800MB-1.5GB depending on years)
+- **Notebook 01**: ~4 min (300MB)
+- **Notebook 02-07**: ~8-10 min first run (800MB-1.5GB depending on years)
 
 ### Data is Cached
 
@@ -123,9 +110,8 @@ Downloaded data is stored in `./maude_data/` and reused across notebooks. After 
 
 ### Disk Space Requirements
 
-- Notebook 01 only: ~50MB
-- Notebooks 02-03: ~500MB
-- All notebooks 01-08: ~2GB
+- Notebooks 01-02: ~500MB
+- All notebooks 01-07: ~2GB
 
 ## Troubleshooting
 

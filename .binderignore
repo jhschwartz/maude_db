@@ -1,8 +1,0 @@
-venv/
-.venv/
-*.db
-maude_data/
-tests/
-.pytest_cache/
-*.pyc
-__pycache__/

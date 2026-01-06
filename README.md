@@ -3,7 +3,6 @@
 A Python library for downloading, querying, and analyzing FDA MAUDE (Manufacturer and User Facility Device Experience) adverse event data. Designed for medical device safety research and regulatory surveillance.
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/jhschwartz/maude_db/main?filepath=notebooks%2F01_quickstart_binder.ipynb)
 [![FDA Site Compatibility](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/jhschwartz/2be19fadf256e3b5de290996b99b1f19/raw/maude_db_fda_compatibility.json)](https://github.com/jhschwartz/maude_db/actions/workflows/fda_compatibility_check.yml)
 [![Tests](https://github.com/jhschwartz/maude_db/actions/workflows/tests.yml/badge.svg)](https://github.com/jhschwartz/maude_db/actions/workflows/tests.yml)
 
@@ -30,19 +29,14 @@ For background on the MAUDE database, see [docs/maude_overview.md](docs/maude_ov
 
 ## Installation
 
-## Try It Now (No Installation)
-
-**🚀 Interactive Demo**: Click the Binder badge above to try maude_db in your browser! Uses 2005 data for a quick (~1 minute) introduction.
-
 ## Quick Start
 
 ### Option 1: Interactive Notebooks (Recommended)
 
 **Best way to learn!** Explore the [notebooks/](notebooks/) directory for interactive examples:
 
-- **[01_quickstart_binder.ipynb](notebooks/01_quickstart_binder.ipynb)** - 5-minute intro (works in Binder)
-- **[02_getting_started.ipynb](notebooks/02_getting_started.ipynb)** - Complete local setup guide
-- **[03_trend_analysis_visualization.ipynb](notebooks/03_trend_analysis_visualization.ipynb)** - Your first real analysis
+- **[01_getting_started.ipynb](notebooks/01_getting_started.ipynb)** - Complete local setup guide
+- **[02_trend_analysis_visualization.ipynb](notebooks/02_trend_analysis_visualization.ipynb)** - Your first real analysis
 
 See [notebooks/README.md](notebooks/README.md) for complete guide with beginner/intermediate/advanced tracks.
 

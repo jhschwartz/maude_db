@@ -15,9 +15,6 @@
 
 
 
---> "pragma" optimizations to db building - claude: "The PRAGMA optimizations are literally just 5-6 lines added at the start of the bulk loading function that tell SQLite "optimize for speed during this import, we'll handle durability ourselves". It's reversible and safe.
-"
-
 ## Future Enhancements
 
 - **Deduplication logic** - Prevent duplicate records when re-adding years
