@@ -27,4 +27,4 @@ jobs:
         pip install -r requirements-dev.txt
 
     - name: Run tests
-      run: python -m pytest
+      run: python -m pytest -m "not external_http"

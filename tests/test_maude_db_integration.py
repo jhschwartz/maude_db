@@ -296,6 +296,8 @@ class TestMaudeDatabaseIntegration(unittest.TestCase):
 
         db.close()
 
+    @pytest.mark.integration
+    @pytest.mark.external_http
     def test_check_url_exists_valid_url(self):
         """Integration test: verify _check_url_exists works with real FDA website"""
         db = MaudeDatabase(self.test_db, verbose=False)
@@ -307,6 +309,8 @@ class TestMaudeDatabaseIntegration(unittest.TestCase):
         db.close()
         print("✓ Successfully verified FDA website is accessible")
 
+    @pytest.mark.integration
+    @pytest.mark.external_http
     def test_check_url_exists_invalid_url(self):
         """Integration test: verify _check_url_exists returns False for 404"""
         db = MaudeDatabase(self.test_db, verbose=False)
@@ -318,6 +322,8 @@ class TestMaudeDatabaseIntegration(unittest.TestCase):
         db.close()
         print("✓ Successfully detected nonexistent URL")
 
+    @pytest.mark.integration
+    @pytest.mark.external_http
     def test_check_url_exists_handles_redirects(self):
         """Integration test: verify _check_url_exists follows HTTP->HTTPS redirects"""
         db = MaudeDatabase(self.test_db, verbose=False)
