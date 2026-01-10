@@ -8,7 +8,7 @@ on:
   push:
     branches: [ main, master ]
     paths:
-      - 'maude_db.py'
+      - 'src/pymaude/**'
       - 'archive_tools/check_fda_compatibility.py'
       - '.github/workflows/fda_compatibility_check.yml'
 
@@ -70,7 +70,7 @@ jobs:
       with:
         auth: ${{ secrets.GIST_SECRET }}
         gistID: 2be19fadf256e3b5de290996b99b1f19
-        filename: maude_db_fda_compatibility.json
+        filename: pymaude_fda_compatibility.json
         label: FDA Site
         message: ${{ steps.parse_results.outputs.badge_message }}
         color: ${{ steps.parse_results.outputs.badge_color }}
@@ -105,7 +105,7 @@ jobs:
 
             const issueBody = `## FDA MAUDE Site Compatibility Issue Detected
 
-          The automated compatibility check has detected that the FDA MAUDE website is no longer compatible with the maude_db library.
+          The automated compatibility check has detected that the FDA MAUDE website is no longer compatible with the PyMAUDE library.
 
           **Timestamp:** ${results.timestamp}
 
@@ -123,7 +123,7 @@ jobs:
           ### Action Required
           1. Review the compatibility check results
           2. Investigate changes to the FDA MAUDE website
-          3. Update the maude_db library code to handle the new format
+          3. Update the PyMAUDE library code to handle the new format
           4. Update documentation if URL patterns have changed
           5. Consider creating an archived version on Zenodo if this is a major change
 
@@ -176,7 +176,7 @@ jobs:
     - name: Fail workflow if incompatible
       if: steps.parse_results.outputs.compatible == 'false'
       run: |
-        echo "❌ FDA MAUDE site is incompatible with maude_db library"
+        echo "❌ FDA MAUDE site is incompatible with PyMAUDE library"
         echo "Errors: ${{ steps.parse_results.outputs.error_count }}"
         echo "Warnings: ${{ steps.parse_results.outputs.warning_count }}"
         exit 1

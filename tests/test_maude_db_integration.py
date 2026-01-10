@@ -13,7 +13,7 @@ import os
 import tempfile
 import shutil
 import pytest
-from maude_db import MaudeDatabase
+from pymaude import MaudeDatabase
 
 
 @pytest.mark.integration

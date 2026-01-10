@@ -36,9 +36,9 @@ import hashlib
 from datetime import datetime
 from pathlib import Path
 
-# Add parent directory to path to import maude_db
+# Add parent directory to path to import pymaude
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from maude_db import MaudeDatabase
+from pymaude import MaudeDatabase
 
 
 def calculate_file_hash(filepath, algorithm='sha256'):
@@ -249,8 +249,8 @@ This data is in the public domain. However, users should:
 
 ## Tools Used
 
-This archive was created using `maude_db` Python library:
-https://github.com/jhschwartz/maude_db
+This archive was created using `PyMAUDE` Python library:
+https://github.com/jhschwartz/PyMAUDE
 
 ## Contact
 

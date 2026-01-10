@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-Solutions to common problems when using `maude_db`.
+Solutions to common problems when using `PyMAUDE`.
 
 ## Table of Contents
 
@@ -17,7 +17,7 @@ Solutions to common problems when using `maude_db`.
 
 ## Installation Issues
 
-### Problem: ImportError: No module named 'maude_db'
+### Problem: ImportError: No module named 'pymaude'
 
 **Cause**: Library not in Python path or virtual environment not activated
 
@@ -31,7 +31,7 @@ source venv/bin/activate  # macOS/Linux
 venv\Scripts\activate     # Windows
 
 # Verify Python can find module
-python -c "from maude_db import MaudeDatabase; print('OK')"
+python -c "from pymaude import MaudeDatabase; print('OK')"
 ```
 
 ---
@@ -145,7 +145,7 @@ rm maude_data/foidev2020.zip
 
 # Re-download
 python -c "
-from maude_db import MaudeDatabase
+from pymaude import MaudeDatabase
 db = MaudeDatabase('maude.db')
 db.add_years(2020, tables=['device'], download=True)
 "
@@ -601,7 +601,7 @@ Include:
 4. **Minimal reproducible example**:
 
 ```python
-from maude_db import MaudeDatabase
+from pymaude import MaudeDatabase
 
 db = MaudeDatabase('test.db')
 # ... minimal code that shows the problem ...
@@ -623,7 +623,7 @@ Problem:
 Getting "sqlite3.OperationalError: no such column: generic_name"
 
 Code:
-from maude_db import MaudeDatabase
+from pymaude import MaudeDatabase
 db = MaudeDatabase('maude.db')
 db.add_years(2020, tables=['device'], download=True)
 results = db.query("SELECT generic_name FROM device")  # Fails here

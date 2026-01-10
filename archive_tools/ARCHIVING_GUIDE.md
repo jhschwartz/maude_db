@@ -76,7 +76,7 @@ Zenodo will assign a DOI for permanent citation.
 To add automatic compatibility monitoring to your GitHub repository:
 
 ### Prerequisites
-- GitHub repository with maude_db code
+- GitHub repository with PyMAUDE code
 - GitHub account
 
 ### Setup Steps
@@ -84,7 +84,7 @@ To add automatic compatibility monitoring to your GitHub repository:
 1. **Create GitHub Gist**
    - Go to https://gist.github.com/
    - Create a new **secret** gist
-   - Filename: `maude_db_fda_compatibility.json`
+   - Filename: `pymaude_fda_compatibility.json`
    - Content:
      ```json
      {
@@ -115,7 +115,7 @@ To add automatic compatibility monitoring to your GitHub repository:
 5. **Update README Badge**
    - Replace the placeholder badge with:
      ```markdown
-     [![FDA Site Compatibility](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/USERNAME/GIST_ID/raw/maude_db_fda_compatibility.json)](https://github.com/USERNAME/maude_db/actions/workflows/fda_compatibility_check.yml)
+     [![FDA Site Compatibility](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/USERNAME/GIST_ID/raw/pymaude_fda_compatibility.json)](https://github.com/USERNAME/maude_db/actions/workflows/fda_compatibility_check.yml)
      ```
 
 See [docs/github_badge_setup.md](docs/github_badge_setup.md) for detailed instructions.
@@ -140,7 +140,7 @@ If the compatibility check fails:
 1. **Review the error messages** - Run with `--json` for structured output
 2. **Check the FDA website** - Visit https://www.accessdata.fda.gov/MAUDE/ftparea
 3. **Create a Zenodo archive** - Preserve current data before FDA changes take effect
-4. **Update the code** - Modify `maude_db.py` to handle new patterns
+4. **Update the code** - Modify `pymaude.py` to handle new patterns
 5. **Document changes** - Update documentation with new URL patterns
 6. **Notify users** - If you have users of your library, let them know
 

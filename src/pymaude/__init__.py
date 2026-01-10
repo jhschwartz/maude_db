@@ -15,13 +15,13 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
-MAUDE Database - FDA MAUDE Database Interface
+PyMAUDE - FDA MAUDE Database Interface
 
 A Python package for downloading, managing, and querying FDA MAUDE
 (Manufacturer and User Facility Device Experience) database.
 
 Usage:
-    from maude_db import MaudeDatabase
+    from pymaude import MaudeDatabase
 
     db = MaudeDatabase('maude.db')
     db.add_years('2015-2024', tables=['master', 'device'], download=True)

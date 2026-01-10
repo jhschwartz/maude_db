@@ -1,15 +1,15 @@
-# maude_db
+# PyMAUDE
 
 A Python library for downloading, querying, and analyzing FDA MAUDE (Manufacturer and User Facility Device Experience) adverse event data. Designed for medical device safety research and regulatory surveillance.
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![FDA Site Compatibility](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/jhschwartz/2be19fadf256e3b5de290996b99b1f19/raw/maude_db_fda_compatibility.json)](https://github.com/jhschwartz/maude_db/actions/workflows/fda_compatibility_check.yml)
-[![Tests](https://github.com/jhschwartz/maude_db/actions/workflows/tests.yml/badge.svg)](https://github.com/jhschwartz/maude_db/actions/workflows/tests.yml)
+[![FDA Site Compatibility](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/jhschwartz/2be19fadf256e3b5de290996b99b1f19/raw/pymaude_fda_compatibility.json)](https://github.com/jhschwartz/PyMAUDE/actions/workflows/fda_compatibility_check.yml)
+[![Tests](https://github.com/jhschwartz/PyMAUDE/actions/workflows/tests.yml/badge.svg)](https://github.com/jhschwartz/PyMAUDE/actions/workflows/tests.yml)
 
 
-## What is maude_db?
+## What is PyMAUDE?
 
-`maude_db` provides a simple interface to work with the FDA's MAUDE database locally. It handles downloading data files from FDA servers, importing them into a SQLite database, and provides convenient query methods for analysis. The library is designed specifically for researchers who need reproducible, offline access to medical device adverse event data.
+`PyMAUDE` provides a simple interface to work with the FDA's MAUDE database locally. It handles downloading data files from FDA servers, importing them into a SQLite database, and provides convenient query methods for analysis. The library is designed specifically for researchers who need reproducible, offline access to medical device adverse event data.
 
 For background on the MAUDE database, see [docs/maude_overview.md](docs/maude_overview.md).
 
@@ -63,7 +63,7 @@ If you want to use SQLite tools (DB Browser, DBeaver, etc.) without writing Pyth
 ### Option 3: Python API
 
 ```python
-from maude_db import MaudeDatabase
+from pymaude import MaudeDatabase
 
 # Create database and download data
 db = MaudeDatabase('maude.db')
@@ -92,7 +92,7 @@ db.close()
 
 ```bash
 # Clone or download this repository
-cd maude_db
+cd PyMAUDE
 
 # Create virtual environment and install dependencies
 make setup
@@ -122,7 +122,7 @@ source venv/bin/activate
 For installing from GitHub:
 
 ```bash
-pip install git+https://github.com/yourusername/maude_db.git
+pip install git+https://github.com/jhschwartz/PyMAUDE.git
 ```
 
 ## Documentation
@@ -233,8 +233,8 @@ Bug reports and feature requests are welcome! Please open an issue on GitHub:
 If you use this library in your research, please cite:
 
 ```
-Schwartz, J. (2025). maude_db: A Python library for FDA MAUDE database analysis.
-https://github.com/jhschwartz/maude_db
+Schwartz, J. (2026). PyMAUDE: A Python library for FDA MAUDE database analysis.
+https://github.com/jhschwartz/PyMAUDE
 ```
 
 **Note**: This citation format may be updated if/when results using this library are published in peer-reviewed literature.
@@ -250,7 +250,7 @@ Device Experience Database. https://www.fda.gov/medical-devices/mandatory-report
 
 This project is licensed under the GNU General Public License v3.0 (GPLv3) - see the [LICENSE](LICENSE) file for details.
 
-Copyright (C) 2025 Jacob Schwartz, jaschwa@umich.edu
+Copyright (C) 2026 Jacob Schwartz, jaschwa@umich.edu
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 

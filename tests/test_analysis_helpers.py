@@ -8,8 +8,8 @@ import pytest
 import pandas as pd
 import os
 import tempfile
-from maude_db import MaudeDatabase
-from maude_db import analysis_helpers
+from pymaude import MaudeDatabase
+from pymaude import analysis_helpers
 
 
 class TestAnalysisHelpers:

@@ -32,7 +32,7 @@ Initialize connection to MAUDE database.
 
 **Example**:
 ```python
-from maude_db import MaudeDatabase
+from pymaude import MaudeDatabase
 
 # Create/connect to database
 db = MaudeDatabase('maude.db')
@@ -477,7 +477,7 @@ results = db.query_device(device_name='thrombectomy')
 narratives = db.get_narratives_for(results)
 ```
 
-**Implementation Note**: This method is implemented in `analysis_helpers` module. For direct access: `from maude_db import analysis_helpers`
+**Implementation Note**: This method is implemented in `analysis_helpers` module. For direct access: `from pymaude import analysis_helpers`
 
 **Related**: `get_narratives()`, `query_device()`
 
@@ -619,7 +619,7 @@ print(f"Total records: {summary['total_records']:,}")
 
 ### Analysis Helper Methods
 
-These convenience methods are available via `db.method_name()` and are implemented in the `analysis_helpers` module. They operate on DataFrames returned by query methods to reduce boilerplate code in analysis notebooks. For direct access to the module: `from maude_db import analysis_helpers`
+These convenience methods are available via `db.method_name()` and are implemented in the `analysis_helpers` module. They operate on DataFrames returned by query methods to reduce boilerplate code in analysis notebooks. For direct access to the module: `from pymaude import analysis_helpers`
 
 ---
 

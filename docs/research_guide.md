@@ -337,7 +337,7 @@ Keep analysis scripts:
 
 ```python
 # analysis.py
-from maude_db import MaudeDatabase
+from pymaude import MaudeDatabase
 
 # Setup
 db = MaudeDatabase('maude_2018_2020.db')

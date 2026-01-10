@@ -5,7 +5,7 @@ import shutil
 import sqlite3
 from datetime import datetime
 
-from maude_db import MaudeDatabase
+from pymaude import MaudeDatabase
 
 
 class TestChecksumTracking(unittest.TestCase):

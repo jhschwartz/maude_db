@@ -3,9 +3,9 @@ requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "maude-db"
+name = "pymaude"
 version = "1.0.0"
-description = "FDA MAUDE Database Interface"
+description = "PyMAUDE: FDA MAUDE Database Interface"
 authors = [{name = "Jacob Schwartz", email = "jaschwa@umich.edu"}]
 readme = "README.md"
 requires-python = ">=3.8"

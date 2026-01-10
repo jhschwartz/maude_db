@@ -14,8 +14,8 @@ import os
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from maude_db import MaudeDatabase
-from maude_db import analysis_helpers
+from pymaude import MaudeDatabase
+from pymaude import analysis_helpers
 
 
 @pytest.fixture

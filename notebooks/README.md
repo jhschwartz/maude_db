@@ -1,6 +1,6 @@
-# maude_db Jupyter Notebooks
+# PyMAUDE Jupyter Notebooks
 
-Interactive examples for the maude_db library. These notebooks demonstrate real research workflows for analyzing FDA MAUDE adverse event data.
+Interactive examples for the PyMAUDE library. These notebooks demonstrate real research workflows for analyzing FDA MAUDE adverse event data.
 
 ## Notebooks
 
@@ -9,8 +9,8 @@ Run notebooks locally to use recent data and demonstrate complete helper methods
 ### Setup
 
 ```bash
-# From maude_db directory
-cd maude_db
+# From PyMAUDE directory
+cd PyMAUDE
 source venv/bin/activate  # Or: venv\Scripts\activate on Windows
 
 # Install visualization dependencies
@@ -24,7 +24,7 @@ jupyter notebook notebooks/
 
 ### Beginner Track 🟢
 
-Start here if you're new to maude_db:
+Start here if you're new to PyMAUDE:
 
 1. **[01_getting_started.ipynb](01_getting_started.ipynb)**
    - **Data**: 2022-2023, device + master (~300MB)
@@ -80,7 +80,7 @@ For experienced researchers:
 
 ### I want to...
 
-**...try maude_db quickly (5 min):**
+**...try PyMAUDE quickly (5 min):**
 - Start: 01 → Done!
 
 **...analyze a specific device (30 min):**
@@ -117,7 +117,7 @@ Downloaded data is stored in `./maude_data/` and reused across notebooks. After 
 
 ### Import Errors
 
-If you see `ModuleNotFoundError: No module named 'maude_db'`:
+If you see `ModuleNotFoundError: No module named 'PyMAUDE'`:
 
 ```python
 # Run this in the first cell:
@@ -165,5 +165,5 @@ Found a bug or have suggestions for new notebooks? Please open an issue or PR at
 ## Questions?
 
 - Review the [troubleshooting guide](../docs/troubleshooting.md)
-- Check [existing issues](https://github.com/yourusername/maude_db/issues)
+- Check [existing issues](https://github.com/yourusername/PyMAUDE/issues)
 - Open a new issue for bugs or feature requests

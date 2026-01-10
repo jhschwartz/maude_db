@@ -8,7 +8,7 @@
 # (at your option) any later version.
 
 """
-Check if the FDA MAUDE website structure is compatible with maude_db library.
+Check if the FDA MAUDE website structure is compatible with PyMAUDE library.
 
 This script verifies that:
 1. FDA base URL is accessible
@@ -34,9 +34,9 @@ import pandas as pd
 from datetime import datetime
 from pathlib import Path
 
-# Add parent directory to path to import maude_db
+# Add parent directory to path to import pymaude
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from maude_db import MaudeDatabase
+from pymaude import MaudeDatabase
 
 
 class CompatibilityChecker:

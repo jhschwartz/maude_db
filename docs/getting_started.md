@@ -1,4 +1,4 @@
-# Getting Started with maude_db
+# Getting Started with PyMAUDE
 
 This tutorial walks you through your first analysis using the `maude_db` library.
 
@@ -21,7 +21,7 @@ The easiest way to set up your environment:
 
 ```bash
 # Navigate to the maude_db directory
-cd maude_db
+cd PyMAUDE
 
 # Create virtual environment and install dependencies
 make setup
@@ -34,7 +34,7 @@ venv\Scripts\activate     # On Windows
 # Your prompt should now show (venv)
 
 # Verify installation
-python -c "from maude_db import MaudeDatabase; print('Success!')"
+python -c "from pymaude import MaudeDatabase; print('Success!')"
 ```
 
 If you see "Success!", you're ready to go!
@@ -47,7 +47,7 @@ If you prefer to set up manually:
 
 ```bash
 # Navigate to the maude_db directory
-cd maude_db
+cd PyMAUDE
 
 # Create virtual environment
 python3 -m venv venv
@@ -63,7 +63,7 @@ venv\Scripts\activate     # On Windows
 pip install -e .
 
 # Verify installation
-python -c "from maude_db import MaudeDatabase; print('Success!')"
+python -c "from pymaude import MaudeDatabase; print('Success!')"
 ```
 
 ## Your First Database
@@ -75,7 +75,7 @@ Let's create your first MAUDE database and run a simple query.
 Create a file called `my_first_query.py`:
 
 ```python
-from maude_db import MaudeDatabase
+from pymaude import MaudeDatabase
 
 # Create or connect to database
 # This creates a file called 'my_maude.db' in the current directory
@@ -132,7 +132,7 @@ your_project/
 Let's download one year of device data. We'll use 2000 because it's relatively small (~10MB).
 
 ```python
-from maude_db import MaudeDatabase
+from pymaude import MaudeDatabase
 
 db = MaudeDatabase('my_maude.db', verbose=True)
 
@@ -210,7 +210,7 @@ Now that you have data, let's query it!
 ### Simple Count
 
 ```python
-from maude_db import MaudeDatabase
+from pymaude import MaudeDatabase
 
 db = MaudeDatabase('my_maude.db')
 

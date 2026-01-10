@@ -19,7 +19,7 @@ Licensed under GPL v3
 import argparse
 import os
 import sys
-from maude_db import MaudeDatabase
+from pymaude import MaudeDatabase
 
 
 def estimate_download_size(years, tables):

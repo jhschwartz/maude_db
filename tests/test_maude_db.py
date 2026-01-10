@@ -8,8 +8,8 @@ from datetime import datetime
 import sys
 from unittest.mock import patch, Mock
 
-from maude_db import MaudeDatabase
-from maude_db.processors import _identify_date_columns, _parse_dates_flexible
+from pymaude import MaudeDatabase
+from pymaude.processors import _identify_date_columns, _parse_dates_flexible
 
 
 class TestMaudeDatabase(unittest.TestCase):

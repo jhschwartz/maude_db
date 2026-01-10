@@ -21,7 +21,7 @@ import pandas as pd
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
-from maude_db import processors
+from pymaude import processors
 
 
 class TestMalformedLineHandling(unittest.TestCase):
