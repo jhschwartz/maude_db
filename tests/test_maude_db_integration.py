@@ -262,9 +262,10 @@ class TestMaudeDatabaseIntegration(unittest.TestCase):
         )
 
         # Read the source file to get expected columns (device uses device2000.txt naming from 2000+)
-        device_file = f"{self.test_data_dir}/device2000.txt"
-        self.assertTrue(os.path.exists(device_file),
-                       f"Device file not found: {device_file}")
+        # Use the same file-finding logic as the database to handle case-sensitivity
+        device_file = db._make_file_path('device', 2000, self.test_data_dir)
+        self.assertTrue(device_file and os.path.exists(device_file),
+                       f"Device file not found in {self.test_data_dir}")
 
         # Read first line (header) from source file
         with open(device_file, 'r', encoding='latin1') as f:
