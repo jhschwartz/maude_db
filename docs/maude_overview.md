@@ -53,7 +53,9 @@ The MAUDE database is organized into several related tables. The `maude_db` libr
 - `MANUFACTURER_D_NAME` - Device manufacturer
 - `DEVICE_SEQUENCE_NUMBER` - Multiple devices can be involved in one event
 
-**Availability**: Individual year files from 1998-present (`foidev[year].zip`)
+**Availability**: Individual year files from 2000-present (`device[year].zip`)
+
+**Note**: 1998-1999 data uses an incompatible schema (contains BASELINE_* columns instead of COMBINATION_PRODUCT_FLAG, UDI fields) and is not supported.
 
 ### Text Table (FOITEXT)
 
@@ -139,11 +141,13 @@ The `maude_db` query methods handle joins automatically using the correct case.
 
 | Table | Supported Years | File Pattern | Notes |
 |-------|----------------|--------------|-------|
-| Master (MDRFOI) | 1991-present | `mdrfoithru[year].zip` | Cumulative file only (~150MB), filtered by year automatically |
-| Device (FOIDEV) | **1998-present** | `foidev[year].zip` (1998-1999)<br>`device[year].zip` (2000-2024)<br>`device.zip` (2025) | Note: naming convention changed in 2000 |
-| Text (FOITEXT) | **1996-present** | `foitext[year].zip` | ~45MB per year |
-| Patient | **1996-present** | `patientthru[year].zip` | Cumulative file only (117MB compressed, 841MB uncompressed), filtered by year automatically |
+| Master (MDRFOI) | **2000-present** | `mdrfoithru[year].zip` | Cumulative file only (~150MB), filtered by year automatically |
+| Device (FOIDEV) | **2000-present** | `device[year].zip` (2000-2024)<br>`device.zip` (2025) | Schema changed in 2000 |
+| Text (FOITEXT) | **2000-present** | `foitext[year].zip` | ~45MB per year |
+| Patient | **2000-present** | `patientthru[year].zip` | Cumulative file only (117MB compressed, 841MB uncompressed), filtered by year automatically |
 | Device Problem | **2019-present** | `foidevproblem[year].zip` | Recent years only |
+
+**Note**: All tables start at 2000 for consistency (device table had a schema change in 2000).
 
 ### Current Year Support (2025)
 

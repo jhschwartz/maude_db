@@ -14,7 +14,7 @@ dev: setup
 	venv/bin/pip install -r requirements.txt
 	venv/bin/pip install -r requirements-dev.txt
 
-test:
+test: setup
 	venv/bin/python -m pytest
 
 init-db: setup
@@ -48,8 +48,8 @@ clean-notebooks:
 	rm -f notebooks/*.txt
 	rm -f notebooks/*.csv
 
-clean: clean-notebooks
-	@echo "Cleaning all generated files..."
+clean-non-notebooks:
+	@echo "Cleaning non-notebook-generated files..."
 	rm -rf venv
 	rm -rf maude_data/*.zip
 	rm -rf __pycache__ tests/__pycache__ src/maude_db/__pycache__
@@ -57,9 +57,9 @@ clean: clean-notebooks
 	rm -rf .pytest_cache
 	rm -rf *.egg-info build dist .eggs
 	rm -rf examples/maude_data
-	rm -f examples/*.db
-	rm -f examples/*.csv
-	rm -f examples/*.png
-	rm -f examples/*.pdf
+
+
+clean: clean-notebooks clean-non-notebooks
+	
 
 .DEFAULT_GOAL := setup

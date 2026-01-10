@@ -129,16 +129,16 @@ your_project/
 
 ## Downloading Your First Data
 
-Let's download one year of device data. We'll use 1998 because it's small (~3MB).
+Let's download one year of device data. We'll use 2000 because it's relatively small (~10MB).
 
 ```python
 from maude_db import MaudeDatabase
 
 db = MaudeDatabase('my_maude.db', verbose=True)
 
-# Download 1998 device data
+# Download 2000 device data (device data available from 2000 onwards due to FDA schema change)
 db.add_years(
-    years=1998,               # Single year
+    years=2000,               # Single year
     tables=['device'],        # Just device table
     download=True,            # Download from FDA
     data_dir='./maude_data'   # Where to cache files
@@ -221,7 +221,7 @@ print(f"Total devices: {result['count'][0]:,}")
 db.close()
 ```
 
-Output: `Total devices: 63,440` (for 1998 data)
+Output: `Total devices: ~52,800` (for 2000 data)
 
 ### Search by Device Name
 

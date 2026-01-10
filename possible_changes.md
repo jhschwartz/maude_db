@@ -6,9 +6,11 @@
 
 
 - **noticed in notebooks**
-  - why are deaths, malfunctions, etc. always zero? 
-  - notebook 03 --> is it plotting cumulatively by year? because it goes up each year in prelim analysis
   - need to confirm each notebook runs, and commit the notebook after all output is shown
+  - seems like cacheing is not working for master table and it may be reloading years unnecessarily 
+  - notebooks 1/2/3/4/6 are passing, saved with proper output
+  - notebooks 5 has a large bug 
+  - notebook 7 needs more data loading, not yet run, just run when I can and confirm ran properly 
 
 
 --> should integration tests spot check actual data from fda?? 

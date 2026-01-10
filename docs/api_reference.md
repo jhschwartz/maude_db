@@ -126,12 +126,12 @@ db.add_years('latest', ...)     # Previous calendar year
 db.add_years('all', ...)        # 1991 to present (use with caution!)
 ```
 
-**Available Tables**:
-- `'master'` - Core event data (MDRFOI) - **Note**: Only comprehensive file available
-- `'device'` - Device details (FOIDEV) - Available 1998+
-- `'text'` - Event narratives (FOITEXT) - Available 1996+
-- `'patient'` - Patient demographics (PATIENT) - Available 1996+
-- `'problems'` - Device problem codes (FOIDEVPROBLEM) - Recent years only
+**Available Tables** (all start at 2000 for consistency):
+- `'master'` - Core event data (MDRFOI) - 2000+
+- `'device'` - Device details (FOIDEV) - 2000+ (schema changed in 2000)
+- `'text'` - Event narratives (FOITEXT) - 2000+
+- `'patient'` - Patient demographics (PATIENT) - 2000+
+- `'problems'` - Device problem codes (FOIDEVPROBLEM) - 2019+
 
 **Returns**: None
 
@@ -721,7 +721,7 @@ Find path to MAUDE data file.
 
 **Example**:
 ```python
-path = db._make_file_path('device', 1998, './maude_data')
+path = db._make_file_path('device', 2020, './maude_data')
 if path:
     print(f"Found: {path}")
 ```

@@ -199,12 +199,12 @@ class TestMaudeDatabase(unittest.TestCase):
         db.close()
     
     def test_add_years_strict_mode_failure(self):
-        """Test that strict mode raises error on missing file"""
+        """Test that strict mode raises error on invalid year/table combination"""
         db = MaudeDatabase(self.test_db, verbose=False)
 
-        # Use 'text' table (yearly pattern) instead of 'master' (cumulative pattern)
-        # for year 1999 which doesn't have a corresponding foitext1999.txt file
-        with self.assertRaises(FileNotFoundError):
+        # Use 'text' table for year 1999, which is before text data availability (2000+)
+        # This should raise ValueError during validation, not FileNotFoundError
+        with self.assertRaises(ValueError):
             db.add_years(1999, tables=['text'], download=False, strict=True, data_dir=self.test_data_dir, interactive=False)
 
         db.close()

@@ -129,10 +129,10 @@ def interactive_mode():
     print("    List: 2020,2021,2022")
     print("    Special: 'latest' (most recent year), 'current' (current year), or 'all' (all available)")
     print()
-    print("  Note: Different tables have different availability:")
-    print("    - Device data: 1998-present")
-    print("    - Text data: 1996-present")
-    print("    - Master/Patient data: 1991-present (large cumulative files)")
+    print("  Note: All tables start at 2000 for consistency:")
+    print("    - Device data: 2000-present (schema changed in 2000)")
+    print("    - Text data: 2000-present")
+    print("    - Master/Patient data: 2000-present (large cumulative files)")
     print()
 
     while True:

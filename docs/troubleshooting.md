@@ -77,16 +77,16 @@ db = MaudeDatabase('~/Documents/maude.db')
 
 **Solution**:
 
-Check data availability:
-- Device (FOIDEV): 1998-present
-- Text (FOITEXT): 1996-present
-- Master (MDRFOI): Comprehensive file only
-- Patient: 1996-present
+Check data availability (all tables start at 2000 for consistency):
+- Device (FOIDEV): 2000-present (schema changed in 2000)
+- Text (FOITEXT): 2000-present
+- Master (MDRFOI): 2000-present
+- Patient: 2000-present
 
 ```python
 # Use available years
-db.add_years('1998-2020', tables=['device'], download=True)  # Works
-db.add_years('1990-1995', tables=['device'], download=True)  # Fails - too early
+db.add_years('2000-2020', tables=['device'], download=True)  # Works
+db.add_years('1998-1999', tables=['device'], download=True)  # Fails - schema incompatible
 
 # Check if file exists before downloading
 if db._check_file_exists(2025, 'foidev'):

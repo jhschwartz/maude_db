@@ -21,11 +21,12 @@ Defines file patterns, availability, and characteristics for each MAUDE table ty
 """
 
 # Table metadata defining file patterns, availability, and characteristics
+# Note: All tables start at 2000 for consistency (device had schema change in 2000)
 TABLE_METADATA = {
     'master': {
         'file_prefix': 'mdrfoi',
         'pattern_type': 'cumulative',  # Uses mdrfoithru{year}.zip
-        'start_year': 1991,
+        'start_year': 2000,  # Consistent start year across all tables
         'current_year_prefix': 'mdrfoi',  # For current year: mdrfoi.zip
         'size_category': 'large',
         'description': 'Master records (adverse event reports)',
@@ -34,7 +35,7 @@ TABLE_METADATA = {
     'device': {
         'file_prefix': 'foidev',
         'pattern_type': 'yearly',  # Uses foidev{year}.zip
-        'start_year': 1998,
+        'start_year': 2000,  # FDA changed schema in 2000 (added COMBINATION_PRODUCT_FLAG, UDI fields; removed BASELINE_* fields)
         'current_year_prefix': 'device',  # For current year: device.zip
         'size_category': 'medium',
         'description': 'Device information',
@@ -43,7 +44,7 @@ TABLE_METADATA = {
     'text': {
         'file_prefix': 'foitext',
         'pattern_type': 'yearly',  # Uses foitext{year}.zip
-        'start_year': 1996,
+        'start_year': 2000,  # Consistent start year across all tables
         'current_year_prefix': 'foitext',  # For current year: foitext.zip
         'size_category': 'medium',
         'description': 'Event narrative text'
@@ -51,7 +52,7 @@ TABLE_METADATA = {
     'patient': {
         'file_prefix': 'patient',
         'pattern_type': 'cumulative',  # Uses patientthru{year}.zip
-        'start_year': 1996,
+        'start_year': 2000,  # Consistent start year across all tables
         'current_year_prefix': 'patient',  # For current year: patient.zip
         'size_category': 'very_large',
         'description': 'Patient demographics',

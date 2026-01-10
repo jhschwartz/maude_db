@@ -468,14 +468,10 @@ class MaudeDatabase:
         current_year = datetime.now().year
 
         if pattern_type == 'yearly':
-            # Special case: device table changed naming in 2000
+            # Special case: device table uses device{year}.txt naming (from 2000+)
             if table == 'device':
-                if year >= 2000:
-                    # 2000+: device2020.txt (lowercase from zip)
-                    return f"{data_dir}/device{year}.txt"
-                else:
-                    # 1998-1999: foidev1999.txt (lowercase from zip)
-                    return f"{data_dir}/{file_prefix}{year}.txt"
+                # Device: device2020.txt (lowercase from zip)
+                return f"{data_dir}/device{year}.txt"
             else:
                 # Standard yearly pattern: foitext2020.txt (lowercase from zip)
                 return f"{data_dir}/{file_prefix}{year}.txt"
@@ -562,14 +558,10 @@ class MaudeDatabase:
 
         # Historical files
         if pattern_type == 'yearly':
-            # Special case: device table changed naming in 2000
+            # Special case: device table uses device{year}.zip naming (from 2000+)
             if table == 'device':
-                if year >= 2000:
-                    # 2000+: device2020.zip
-                    filename = f"device{year}.zip"
-                else:
-                    # 1998-1999: foidev1999.zip
-                    filename = f"{file_prefix}{year}.zip"
+                # Device: device2020.zip (years 2000+ only, due to schema change)
+                filename = f"device{year}.zip"
             else:
                 # Standard yearly pattern: foitext2020.zip
                 filename = f"{file_prefix}{year}.zip"
@@ -838,20 +830,13 @@ class MaudeDatabase:
             ])
 
         if pattern_type == 'yearly':
-            # Special case: device table changed naming in 2000
+            # Special case: device table uses device{year}.txt naming (from 2000+)
             if table == 'device':
-                if year >= 2000:
-                    # 2000+: device2020.txt or DEVICE2020.txt
-                    patterns.extend([
-                        f"device{year}.txt",
-                        f"DEVICE{year}.txt"
-                    ])
-                else:
-                    # 1998-1999: foidev1999.txt or FOIDEV1999.txt
-                    patterns.extend([
-                        f"{file_prefix}{year}.txt",
-                        f"{file_prefix.upper()}{year}.txt"
-                    ])
+                # Device: device2020.txt or DEVICE2020.txt (2000+ only)
+                patterns.extend([
+                    f"device{year}.txt",
+                    f"DEVICE{year}.txt"
+                ])
             else:
                 # Yearly pattern: foitext2020.txt
                 patterns.extend([
@@ -1037,9 +1022,21 @@ class MaudeDatabase:
             if self.verbose:
                 print(f'Will refresh {len(existing)} existing years')
 
+        # Determine which tables exist in the database
+        cursor = self.conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '\\_%' ESCAPE '\\'")
+        existing_tables = [row[0] for row in cursor.fetchall()]
+
+        # Only update tables that exist
+        tables_to_update = [t for t in ['master', 'device', 'patient', 'text'] if t in existing_tables]
+
+        if not tables_to_update:
+            if self.verbose:
+                print('No data tables found in database.')
+            return
+
         # Use force_refresh=False to let checksum tracking decide what needs updating
         # This ensures only changed files are reprocessed
-        self.add_years(years_to_process, download=download, force_refresh=False, interactive=False)
+        self.add_years(years_to_process, tables=tables_to_update, download=download, force_refresh=False, interactive=False)
 
 
     def _get_latest_available_year(self):
@@ -1129,14 +1126,18 @@ class MaudeDatabase:
 
         where = " AND ".join(conditions) if conditions else "1=1"
 
-        # First get all matching rows, then deduplicate by keeping first device per event
-        # This ensures one row per event even when multiple devices are involved
+        # Get one row per event (MDR_REPORT_KEY) by using MIN(ROWID) to pick first device
+        # This ensures consistent deduplication when multiple devices are associated with one event
         sql = f"""
-            SELECT DISTINCT m.MDR_REPORT_KEY, m.*, d.*
+            SELECT m.*, d.*
             FROM master m
             JOIN device d ON m.MDR_REPORT_KEY = d.MDR_REPORT_KEY
             WHERE {where}
-            GROUP BY m.MDR_REPORT_KEY
+              AND d.ROWID IN (
+                SELECT MIN(d2.ROWID)
+                FROM device d2
+                WHERE d2.MDR_REPORT_KEY = m.MDR_REPORT_KEY
+              )
         """
 
         return pd.read_sql_query(sql, self.conn, params=params)

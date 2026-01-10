@@ -44,9 +44,9 @@ class TestMaudeDatabaseIntegration(unittest.TestCase):
         """Test downloading device (foidev) data from FDA"""
         db = MaudeDatabase(self.test_db, verbose=True)
 
-        # Use 1998 - earliest available individual year file for foidev
+        # Use 2000 - earliest supported year (1998-1999 have incompatible schema)
         db.add_years(
-            years=1998,
+            years=2000,
             tables=['device'],
             download=True,
             data_dir=self.test_data_dir
@@ -59,18 +59,19 @@ class TestMaudeDatabaseIntegration(unittest.TestCase):
         self.assertGreater(count, 0, "Should have downloaded and loaded some device records")
 
         db.close()
-        print(f"✓ Successfully downloaded and loaded {count:,} device records from 1998")
+        print(f"✓ Successfully downloaded and loaded {count:,} device records from 2000")
 
     def test_download_single_year_text(self):
         """Test downloading narrative text (foitext) data from FDA"""
         db = MaudeDatabase(self.test_db, verbose=True)
 
-        # Use 1996 - earliest year according to FDA website for foitext
+        # Use 2000 - text data only available from 2000 onwards
         db.add_years(
-            years=1996,
+            years=2000,
             tables=['text'],
             download=True,
-            data_dir=self.test_data_dir
+            data_dir=self.test_data_dir,
+            interactive=False
         )
 
         # Verify data was loaded
@@ -86,9 +87,9 @@ class TestMaudeDatabaseIntegration(unittest.TestCase):
         """Test downloading multiple table types for the same year"""
         db = MaudeDatabase(self.test_db, verbose=True)
 
-        # Download device and text for 1998 (both have individual year files)
+        # Download device and text for 2000 (both have individual year files)
         db.add_years(
-            years=1998,
+            years=2000,
             tables=['device', 'text'],
             download=True,
             data_dir=self.test_data_dir
@@ -119,16 +120,16 @@ class TestMaudeDatabaseIntegration(unittest.TestCase):
         """Test that re-downloading uses cached ZIP files"""
         db = MaudeDatabase(self.test_db, verbose=True)
 
-        # First download - use 1998 device file
+        # First download - use 2000 device file
         db.add_years(
-            years=1998,
+            years=2000,
             tables=['device'],
             download=True,
             data_dir=self.test_data_dir
         )
 
-        # Check that ZIP file was saved
-        zip_path = f"{self.test_data_dir}/foidev1998.zip"
+        # Check that ZIP file was saved (device uses device2000.zip naming from 2000+)
+        zip_path = f"{self.test_data_dir}/device2000.zip"
         self.assertTrue(os.path.exists(zip_path), "ZIP file should be cached")
 
         # Get ZIP file modification time
@@ -142,7 +143,7 @@ class TestMaudeDatabaseIntegration(unittest.TestCase):
         # Second download should use cached ZIP
         db2 = MaudeDatabase(self.test_db, verbose=True)
         db2.add_years(
-            years=1998,
+            years=2000,
             tables=['device'],
             download=True,
             data_dir=self.test_data_dir
@@ -159,9 +160,9 @@ class TestMaudeDatabaseIntegration(unittest.TestCase):
         """Test that _check_file_exists correctly identifies available files"""
         db = MaudeDatabase(self.test_db, verbose=False)
 
-        # 1998 foidev should exist
-        exists_1998 = db._check_file_exists(1998, 'foidev')
-        self.assertTrue(exists_1998, "1998 device file should exist on FDA server")
+        # 2000 foidev should exist
+        exists_2000 = db._check_file_exists(2000, 'foidev')
+        self.assertTrue(exists_2000, "2000 device file should exist on FDA server")
 
         # 1980 probably doesn't exist (too old)
         exists_1980 = db._check_file_exists(1980, 'foidev')
@@ -219,9 +220,9 @@ class TestMaudeDatabaseIntegration(unittest.TestCase):
         """Test a realistic end-to-end workflow with real data"""
         db = MaudeDatabase(self.test_db, verbose=True)
 
-        # Download 1998 device data
+        # Download 2000 device data
         db.add_years(
-            years=1998,
+            years=2000,
             tables=['device'],
             download=True,
             data_dir=self.test_data_dir
@@ -242,7 +243,7 @@ class TestMaudeDatabaseIntegration(unittest.TestCase):
         """)
 
         self.assertGreater(len(all_devices), 0, "Should have some device types")
-        print(f"\n✓ Found {len(all_devices)} device types in 1998 data")
+        print(f"\n✓ Found {len(all_devices)} device types in 2000 data")
         print("\nTop devices:")
         print(all_devices.to_string(index=False))
 
@@ -252,16 +253,16 @@ class TestMaudeDatabaseIntegration(unittest.TestCase):
         """Test that device table in SQLite has exactly the same columns as the source text file"""
         db = MaudeDatabase(self.test_db, verbose=True)
 
-        # Download 1998 device data
+        # Download 2000 device data
         db.add_years(
-            years=1998,
+            years=2000,
             tables=['device'],
             download=True,
             data_dir=self.test_data_dir
         )
 
-        # Read the source file to get expected columns
-        device_file = f"{self.test_data_dir}/foidev1998.txt"
+        # Read the source file to get expected columns (device uses device2000.txt naming from 2000+)
+        device_file = f"{self.test_data_dir}/device2000.txt"
         self.assertTrue(os.path.exists(device_file),
                        f"Device file not found: {device_file}")
 
