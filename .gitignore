@@ -44,3 +44,6 @@ notebooks/**/*.zip
 notebooks/**/*.txt
 notebooks/**/*.png
 notebooks/**/*.csv
+
+# Analysis 
+analysis/
