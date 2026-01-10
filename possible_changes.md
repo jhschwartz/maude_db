@@ -6,14 +6,16 @@
 
 
 - **noticed in notebooks**
-  - need to confirm each notebook runs, and commit the notebook after all output is shown
-  - seems like cacheing is not working for master table and it may be reloading years unnecessarily 
-  - notebooks 1/2/3/4/6 are passing, saved with proper output
-  - notebooks 5 has a large bug 
-  - notebook 7 needs more data loading, not yet run, just run when I can and confirm ran properly 
+  - seems like cacheing is not working for master table and it may be reloading years unnecessarily -- specifically, if one year is added, then all years existing get deleted and reinitialized
+  - notebooks 1-6 ok, failure in nb 7
+  - notebooks will likely be redone with upcoming claude updates upon usage refresh
 
 
 --> should integration tests spot check actual data from fda?? 
+
+
+--> claude session is waiting to do major change to automate a bunch of the analysis. 
+
 
 
 
