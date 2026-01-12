@@ -1210,3 +1210,122 @@ def compare_report_vs_event_counts(results_df, event_key_col='EVENT_KEY',
                                 grouped['event_count'] * 100).fillna(0.0)
 
     return grouped
+
+
+# ==============================================================================
+# Patient OUTCOME Concatenation Detection Functions
+# ==============================================================================
+
+def detect_multi_patient_reports(patient_df):
+    """
+    Detect reports with multiple patients (potential outcome concatenation).
+
+    In MAUDE data, when multiple patients are involved in a single report,
+    the OUTCOME fields concatenate sequentially across patients, leading to
+    inflated outcome counts. This function identifies affected reports.
+
+    Args:
+        patient_df: DataFrame with patient data (must have MDR_REPORT_KEY column)
+
+    Returns:
+        dict with keys:
+        - total_reports (int): Total unique MDR_REPORT_KEYs
+        - multi_patient_reports (int): Count of reports with >1 patient
+        - affected_percentage (float): % of reports affected (0-100)
+        - affected_mdr_keys (list): MDR_REPORT_KEYs with multiple patients
+
+    Example:
+        >>> patient_data = db.enrich_with_patient_data(results)
+        >>> validation = detect_multi_patient_reports(patient_data)
+        >>> if validation['affected_percentage'] > 10:
+        ...     print(f"Warning: {validation['affected_percentage']:.1f}% have multiple patients")
+    """
+    if patient_df.empty:
+        return {
+            'total_reports': 0,
+            'multi_patient_reports': 0,
+            'affected_percentage': 0.0,
+            'affected_mdr_keys': []
+        }
+
+    if 'MDR_REPORT_KEY' not in patient_df.columns:
+        raise ValueError("Column 'MDR_REPORT_KEY' not found in DataFrame")
+
+    # Count patients per report
+    patients_per_report = patient_df.groupby('MDR_REPORT_KEY').size()
+
+    total_reports = len(patients_per_report)
+    multi_patient_reports = (patients_per_report > 1).sum()
+    affected_percentage = (multi_patient_reports / total_reports * 100) if total_reports > 0 else 0.0
+
+    # Get list of affected MDR_REPORT_KEYs
+    affected_mdr_keys = patients_per_report[patients_per_report > 1].index.tolist()
+
+    return {
+        'total_reports': total_reports,
+        'multi_patient_reports': multi_patient_reports,
+        'affected_percentage': affected_percentage,
+        'affected_mdr_keys': affected_mdr_keys
+    }
+
+
+def count_unique_outcomes_per_report(patient_df, outcome_col='SEQUENCE_NUMBER_OUTCOME'):
+    """
+    Count unique outcome codes per report, preventing inflation from concatenation.
+
+    When multiple patients share a report, outcome fields concatenate sequentially.
+    This function counts each outcome code ONCE per report, regardless of how many
+    times it appears in concatenated fields.
+
+    Args:
+        patient_df: DataFrame with patient data
+        outcome_col: Column name for outcomes (default: 'SEQUENCE_NUMBER_OUTCOME')
+
+    Returns:
+        DataFrame with columns:
+        - MDR_REPORT_KEY: Report identifier
+        - patient_count: Number of patients in this report
+        - unique_outcomes: List of unique outcome codes for this report
+        - outcome_counts: Dict with count of each outcome code
+
+    Example:
+        >>> patient_data = db.enrich_with_patient_data(results)
+        >>> outcome_summary = count_unique_outcomes_per_report(patient_data)
+        >>> # Count reports with at least one death (avoiding concatenation inflation)
+        >>> death_count = (outcome_summary['unique_outcomes'].apply(lambda x: 'D' in x)).sum()
+        >>> print(f"Reports with deaths: {death_count}")
+    """
+    if patient_df.empty:
+        return pd.DataFrame(columns=['MDR_REPORT_KEY', 'patient_count', 'unique_outcomes', 'outcome_counts'])
+
+    if 'MDR_REPORT_KEY' not in patient_df.columns:
+        raise ValueError("Column 'MDR_REPORT_KEY' not found in DataFrame")
+
+    if outcome_col not in patient_df.columns:
+        raise ValueError(f"Column '{outcome_col}' not found in DataFrame")
+
+    def extract_outcomes(outcome_str):
+        """Extract individual outcome codes from semicolon-separated string."""
+        if pd.isna(outcome_str):
+            return set()
+        return {code.strip() for code in str(outcome_str).split(';') if code.strip()}
+
+    # For each report, collect all outcomes from all patients and deduplicate
+    report_outcomes = []
+
+    for mdr_key, group in patient_df.groupby('MDR_REPORT_KEY'):
+        all_outcomes = set()
+        for outcome_str in group[outcome_col]:
+            all_outcomes.update(extract_outcomes(outcome_str))
+
+        outcome_list = sorted(all_outcomes)
+        outcome_counts_dict = {code: 1 for code in outcome_list}  # Each outcome counted once per report
+
+        report_outcomes.append({
+            'MDR_REPORT_KEY': mdr_key,
+            'patient_count': len(group),
+            'unique_outcomes': outcome_list,
+            'outcome_counts': outcome_counts_dict
+        })
+
+    return pd.DataFrame(report_outcomes)

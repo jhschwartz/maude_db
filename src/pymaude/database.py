@@ -1408,6 +1408,16 @@ class MaudeDatabase:
         """Compare report vs event counts. See analysis_helpers module."""
         return analysis_helpers.compare_report_vs_event_counts(results_df, event_key_col, group_by)
 
+    # ==================== Patient OUTCOME Concatenation Methods ====================
+
+    def detect_multi_patient_reports(self, patient_df):
+        """Detect reports with multiple patients. See analysis_helpers module."""
+        return analysis_helpers.detect_multi_patient_reports(patient_df)
+
+    def count_unique_outcomes_per_report(self, patient_df, outcome_col='SEQUENCE_NUMBER_OUTCOME'):
+        """Count unique outcomes per report. See analysis_helpers module."""
+        return analysis_helpers.count_unique_outcomes_per_report(patient_df, outcome_col)
+
 
     # ==================== Database Info Methods ====================
 
