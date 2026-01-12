@@ -1088,58 +1088,124 @@ class MaudeDatabase:
 
 
     def query_device(self, device_name=None, product_code=None,
-                     start_date=None, end_date=None):
+                     start_date=None, end_date=None, deduplicate_events=True):
         """
         Query device events with optional filters.
 
-        Returns one row per unique event (MDR_REPORT_KEY). When an event involves
-        multiple devices, only the first device record is included.
+        By default, returns one row per unique EVENT (EVENT_KEY). When multiple reports
+        exist for the same event (e.g., manufacturer + hospital reports), only the first
+        report is included. When an event/report involves multiple devices, only the
+        first device record is included.
 
         Args:
             device_name: Filter by generic_name or brand_name (partial match)
             product_code: Filter by exact product code
             start_date: Only events on/after this date
             end_date: Only events on/before this date
+            deduplicate_events: If True (default), return one row per EVENT_KEY.
+                               If False, return all reports (may include multiple
+                               reports for the same event). Set to False only if you
+                               specifically need report-level data.
 
         Returns:
             DataFrame with matching records from master + device tables.
-            One row per event (unique MDR_REPORT_KEY), even if multiple devices
-            are associated with the event.
+            By default, one row per unique event (EVENT_KEY). Approximately 8% of
+            reports share EVENT_KEY with other reports (same event, different sources).
+
+        Note:
+            This method now deduplicates by EVENT_KEY by default (changed from
+            MDR_REPORT_KEY). This ensures accurate event counts for epidemiological
+            analysis. Use deduplicate_events=False to get report-level data for
+            reporting compliance analysis.
         """
-        conditions = []
+        # Check if EVENT_KEY column exists in master table
+        cursor = self.conn.execute("PRAGMA table_info(master)")
+        columns = {row[1] for row in cursor.fetchall()}
+        has_event_key = 'EVENT_KEY' in columns
+
+        # If EVENT_KEY doesn't exist, fall back to non-deduplication mode
+        if deduplicate_events and not has_event_key:
+            deduplicate_events = False
+
+        # Build WHERE conditions for device filters
+        device_conditions = []
         params = {}
 
         if device_name:
-            conditions.append("(d.GENERIC_NAME LIKE :device OR d.BRAND_NAME LIKE :device)")
+            device_conditions.append("(UPPER(d.GENERIC_NAME) LIKE UPPER(:device) OR UPPER(d.BRAND_NAME) LIKE UPPER(:device))")
             params['device'] = f'%{device_name}%'
 
         if product_code:
-            conditions.append("d.DEVICE_REPORT_PRODUCT_CODE = :code")
+            device_conditions.append("d.DEVICE_REPORT_PRODUCT_CODE = :code")
             params['code'] = product_code
 
+        device_where = " AND ".join(device_conditions) if device_conditions else "1=1"
+
+        # Build WHERE conditions for date filters (applied to master table)
+        date_conditions = []
+
         if start_date:
-            conditions.append("m.DATE_RECEIVED >= :start")
+            date_conditions.append("m.DATE_RECEIVED >= :start")
             params['start'] = start_date
 
         if end_date:
-            conditions.append("m.DATE_RECEIVED < date(:end, '+1 day')")
+            date_conditions.append("m.DATE_RECEIVED < date(:end, '+1 day')")
             params['end'] = end_date
 
-        where = " AND ".join(conditions) if conditions else "1=1"
+        date_where = " AND ".join(date_conditions) if date_conditions else "1=1"
 
-        # Get one row per event (MDR_REPORT_KEY) by using MIN(ROWID) to pick first device
-        # This ensures consistent deduplication when multiple devices are associated with one event
-        sql = f"""
-            SELECT m.*, d.*
-            FROM master m
-            JOIN device d ON m.MDR_REPORT_KEY = d.MDR_REPORT_KEY
-            WHERE {where}
-              AND d.ROWID IN (
-                SELECT MIN(d2.ROWID)
-                FROM device d2
-                WHERE d2.MDR_REPORT_KEY = m.MDR_REPORT_KEY
-              )
-        """
+        if deduplicate_events:
+            # Fast CTE-based deduplication by EVENT_KEY
+            # Performance: O(N+M) complexity vs O(N*M) for correlated subquery
+            # CRITICAL: Must filter by device FIRST, then deduplicate by EVENT_KEY
+            # FIX: Store device_rowid in Step 1 to preserve filter through deduplication
+            sql = f"""
+                WITH matching_reports AS (
+                    -- Step 1: Find all reports with matching devices and date filters
+                    -- FIX: Store device_rowid to preserve which device matched the filter
+                    SELECT DISTINCT
+                        m.MDR_REPORT_KEY,
+                        m.EVENT_KEY,
+                        m.ROWID as master_rowid,
+                        d.ROWID as device_rowid
+                    FROM master m
+                    JOIN device d ON d.MDR_REPORT_KEY = m.MDR_REPORT_KEY
+                    WHERE {device_where} AND {date_where}
+                ),
+                first_report_per_event AS (
+                    -- Step 2: For each EVENT_KEY, select first report and device
+                    -- FIX: Keep device_rowid from Step 1 to use in final join
+                    -- FIX: Use MDR_REPORT_KEY as fallback when EVENT_KEY is NULL
+                    SELECT
+                        EVENT_KEY,
+                        MDR_REPORT_KEY,
+                        MIN(master_rowid) as first_master_rowid,
+                        MIN(device_rowid) as first_device_rowid
+                    FROM matching_reports
+                    GROUP BY COALESCE(EVENT_KEY, MDR_REPORT_KEY)
+                )
+                -- Step 3: Final join using preserved device_rowid
+                -- FIX: Removed intermediate CTE that joined to ALL devices (was the bug!)
+                SELECT m.*, d.*
+                FROM first_report_per_event frpe
+                JOIN master m ON m.ROWID = frpe.first_master_rowid
+                JOIN device d ON d.ROWID = frpe.first_device_rowid
+            """
+        else:
+            # No deduplication - return all matching reports and devices
+            # Still use CTE for consistent performance
+            sql = f"""
+                WITH matching_devices AS (
+                    SELECT d.MDR_REPORT_KEY, d.ROWID as device_rowid
+                    FROM device d
+                    WHERE {device_where}
+                )
+                SELECT m.*, d.*
+                FROM master m
+                JOIN matching_devices md ON md.MDR_REPORT_KEY = m.MDR_REPORT_KEY
+                JOIN device d ON d.ROWID = md.device_rowid
+                WHERE {date_where}
+            """
 
         return pd.read_sql_query(sql, self.conn, params=params)
 
@@ -1167,7 +1233,7 @@ class MaudeDatabase:
             condition = "d.DEVICE_REPORT_PRODUCT_CODE = :code"
             params['code'] = product_code
         elif device_name:
-            condition = "(d.GENERIC_NAME LIKE :name OR d.BRAND_NAME LIKE :name)"
+            condition = "(UPPER(d.GENERIC_NAME) LIKE UPPER(:name) OR UPPER(d.BRAND_NAME) LIKE UPPER(:name))"
             params['name'] = f'%{device_name}%'
 
         # Count patient outcomes from patient table (SEQUENCE_NUMBER_OUTCOME contains semicolon-separated codes)
@@ -1321,6 +1387,26 @@ class MaudeDatabase:
         return analysis_helpers.export_publication_figures(
             self, results_df, output_dir, prefix, formats, **kwargs
         )
+
+    # ==================== EVENT_KEY Deduplication Methods ====================
+
+    def count_unique_events(self, results_df, event_key_col='EVENT_KEY'):
+        """Count unique events vs reports. See analysis_helpers module."""
+        return analysis_helpers.count_unique_events(results_df, event_key_col)
+
+    def detect_multi_report_events(self, results_df, event_key_col='EVENT_KEY'):
+        """Identify events with multiple reports. See analysis_helpers module."""
+        return analysis_helpers.detect_multi_report_events(results_df, event_key_col)
+
+    def select_primary_report(self, results_df, event_key_col='EVENT_KEY',
+                             strategy='first_received'):
+        """Select primary report for each event. See analysis_helpers module."""
+        return analysis_helpers.select_primary_report(results_df, event_key_col, strategy)
+
+    def compare_report_vs_event_counts(self, results_df, event_key_col='EVENT_KEY',
+                                       group_by=None):
+        """Compare report vs event counts. See analysis_helpers module."""
+        return analysis_helpers.compare_report_vs_event_counts(results_df, event_key_col, group_by)
 
 
     # ==================== Database Info Methods ====================

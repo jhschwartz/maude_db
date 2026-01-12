@@ -143,6 +143,13 @@ def process_file(filepath, table_name, conn, chunk_size, verbose=False):
         if date_columns:
             chunk = _parse_dates_flexible(chunk, date_columns)
 
+        # Convert key columns to integer for consistent join types
+        # MDR_REPORT_KEY and EVENT_KEY should always be integers for proper joins
+        if 'MDR_REPORT_KEY' in chunk.columns:
+            chunk['MDR_REPORT_KEY'] = pd.to_numeric(chunk['MDR_REPORT_KEY'], errors='coerce').astype('Int64')
+        if 'EVENT_KEY' in chunk.columns:
+            chunk['EVENT_KEY'] = pd.to_numeric(chunk['EVENT_KEY'], errors='coerce').astype('Int64')
+
         # Truncate text columns that might exceed SQLite's max length
         chunk = _truncate_large_text_columns(chunk)
         chunk.to_sql(table_name, conn, if_exists='append', index=False)
@@ -228,6 +235,12 @@ def process_cumulative_file(filepath, table_name, year, metadata, conn, chunk_si
             chunk_filtered = chunk
 
         if len(chunk_filtered) > 0:
+            # Convert key columns to integer for consistent join types
+            if 'MDR_REPORT_KEY' in chunk_filtered.columns:
+                chunk_filtered['MDR_REPORT_KEY'] = pd.to_numeric(chunk_filtered['MDR_REPORT_KEY'], errors='coerce').astype('Int64')
+            if 'EVENT_KEY' in chunk_filtered.columns:
+                chunk_filtered['EVENT_KEY'] = pd.to_numeric(chunk_filtered['EVENT_KEY'], errors='coerce').astype('Int64')
+
             # Truncate text columns that might exceed SQLite's max length
             chunk_filtered = _truncate_large_text_columns(chunk_filtered)
             chunk_filtered.to_sql(table_name, conn, if_exists='append', index=False)
@@ -326,6 +339,12 @@ def process_cumulative_file_batch(filepath, table_name, years_list, metadata, co
             chunk_filtered = chunk
 
         if len(chunk_filtered) > 0:
+            # Convert key columns to integer for consistent join types
+            if 'MDR_REPORT_KEY' in chunk_filtered.columns:
+                chunk_filtered['MDR_REPORT_KEY'] = pd.to_numeric(chunk_filtered['MDR_REPORT_KEY'], errors='coerce').astype('Int64')
+            if 'EVENT_KEY' in chunk_filtered.columns:
+                chunk_filtered['EVENT_KEY'] = pd.to_numeric(chunk_filtered['EVENT_KEY'], errors='coerce').astype('Int64')
+
             # Truncate text columns that might exceed SQLite's max length
             chunk_filtered = _truncate_large_text_columns(chunk_filtered)
             chunk_filtered.to_sql(table_name, conn, if_exists='append', index=False)
@@ -370,15 +389,27 @@ def create_indexes(conn, tables, verbose=False):
     )
     existing_tables = {row[0] for row in cursor.fetchall()}
 
+    print('debug: tables =', tables)
+    print('debug: existing_tables =', existing_tables)
+
     if 'master' in tables and 'master' in existing_tables:
         conn.execute('CREATE INDEX IF NOT EXISTS idx_master_key ON master(MDR_REPORT_KEY)')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_master_date ON master(DATE_RECEIVED)')
+
+        # Index on EVENT_KEY for deduplication queries (GROUP BY EVENT_KEY)
+        # Only create if EVENT_KEY column exists (it may be NULL in older data)
+        cursor = conn.execute("PRAGMA table_info(master)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if 'EVENT_KEY' in columns:
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_master_event ON master(EVENT_KEY)')
+    else: print('debug: there is NOT a master table')
 
     if 'device' in tables and 'device' in existing_tables:
         conn.execute('CREATE INDEX IF NOT EXISTS idx_device_key ON device(MDR_REPORT_KEY)')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_device_code ON device(DEVICE_REPORT_PRODUCT_CODE)')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_device_generic ON device(GENERIC_NAME)')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_device_brand ON device(BRAND_NAME)')
+    else: print('debug: there is NOT a device table')
 
 
 

@@ -574,7 +574,7 @@ def find_brand_variations(db, search_terms, max_results=50):
 
     # Build LIKE conditions for case-insensitive search
     conditions = " OR ".join([
-        f"BRAND_NAME LIKE '%{term}%'"
+        f"UPPER(BRAND_NAME) LIKE UPPER('%{term}%')"
         for term in search_terms
     ])
 
@@ -967,3 +967,246 @@ def export_publication_figures(db, results_df, output_dir, prefix='figure',
         generated['event_type_comparison'].append(fname)
 
     return generated
+
+
+# ==============================================================================
+# EVENT_KEY Deduplication and Validation Functions
+# ==============================================================================
+
+def count_unique_events(results_df, event_key_col='EVENT_KEY'):
+    """
+    Count unique events vs total reports to detect duplication.
+
+    Approximately 8% of MAUDE reports share EVENT_KEY with other reports
+    (same event reported by manufacturer, hospital, patient, etc.). This
+    function helps identify the duplication rate in your dataset.
+
+    Args:
+        results_df: DataFrame with query results
+        event_key_col: Column name for EVENT_KEY (default: 'EVENT_KEY')
+
+    Returns:
+        dict with keys:
+        - total_reports (int): Total number of reports (rows)
+        - unique_events (int): Number of unique EVENT_KEYs
+        - duplication_rate (float): Percentage of reports that are duplicates (0-100)
+        - multi_report_events (list): EVENT_KEYs that have multiple reports
+
+    Example:
+        >>> results = db.query_device(device_name='pacemaker')
+        >>> stats = count_unique_events(results)
+        >>> print(f"Duplication: {stats['duplication_rate']:.1f}%")
+        Duplication: 7.8%
+    """
+    if results_df.empty:
+        return {
+            'total_reports': 0,
+            'unique_events': 0,
+            'duplication_rate': 0.0,
+            'multi_report_events': []
+        }
+
+    if event_key_col not in results_df.columns:
+        raise ValueError(f"Column '{event_key_col}' not found in DataFrame. "
+                        "EVENT_KEY column is required for event deduplication.")
+
+    total_reports = len(results_df)
+    unique_events = results_df[event_key_col].nunique()
+
+    # Find EVENT_KEYs with multiple reports
+    event_counts = results_df.groupby(event_key_col).size()
+    multi_report_events = event_counts[event_counts > 1].index.tolist()
+
+    # Calculate duplication rate
+    duplicates = total_reports - unique_events
+    duplication_rate = (duplicates / total_reports * 100) if total_reports > 0 else 0.0
+
+    return {
+        'total_reports': total_reports,
+        'unique_events': unique_events,
+        'duplication_rate': duplication_rate,
+        'multi_report_events': multi_report_events
+    }
+
+
+def detect_multi_report_events(results_df, event_key_col='EVENT_KEY'):
+    """
+    Identify which events have multiple reports.
+
+    Useful for understanding which specific events have duplicate reporting
+    from multiple sources (manufacturer, hospital, patient, etc.).
+
+    Args:
+        results_df: DataFrame with query results
+        event_key_col: Column name for EVENT_KEY (default: 'EVENT_KEY')
+
+    Returns:
+        DataFrame with columns:
+        - EVENT_KEY: Event identifier
+        - report_count: Number of reports for this event
+        - mdr_report_keys: List of MDR_REPORT_KEYs for this event
+
+    Example:
+        >>> multi_reports = detect_multi_report_events(results)
+        >>> print(f"Found {len(multi_reports)} events with multiple reports")
+        >>> print(multi_reports.head())
+    """
+    if results_df.empty:
+        return pd.DataFrame(columns=[event_key_col, 'report_count', 'mdr_report_keys'])
+
+    if event_key_col not in results_df.columns:
+        raise ValueError(f"Column '{event_key_col}' not found in DataFrame")
+
+    if 'MDR_REPORT_KEY' not in results_df.columns:
+        raise ValueError("Column 'MDR_REPORT_KEY' not found in DataFrame")
+
+    # Group by EVENT_KEY and count reports
+    grouped = results_df.groupby(event_key_col).agg(
+        report_count=('MDR_REPORT_KEY', 'size'),
+        mdr_report_keys=('MDR_REPORT_KEY', lambda x: list(x))
+    ).reset_index()
+
+    # Filter to only multi-report events
+    multi_reports = grouped[grouped['report_count'] > 1].copy()
+
+    return multi_reports.sort_values('report_count', ascending=False).reset_index(drop=True)
+
+
+def select_primary_report(results_df, event_key_col='EVENT_KEY',
+                          strategy='first_received'):
+    """
+    When multiple reports exist for same event, select primary report.
+
+    This function manually deduplicates a DataFrame that may contain multiple
+    reports for the same event. Note: query_device() now deduplicates by default,
+    so this function is mainly useful for analyzing already-retrieved data or
+    when working with results from deduplicate_events=False queries.
+
+    Args:
+        results_df: DataFrame with query results
+        event_key_col: Column name for EVENT_KEY (default: 'EVENT_KEY')
+        strategy: Selection strategy (default: 'first_received')
+            - 'first_received': Select earliest DATE_RECEIVED
+            - 'manufacturer': Prefer manufacturer reports (REPORT_SOURCE_CODE)
+            - 'most_complete': Select report with most non-null fields
+
+    Returns:
+        DataFrame with one row per unique EVENT_KEY
+
+    Example:
+        >>> # Get all reports including duplicates
+        >>> all_reports = db.query_device(device_name='stent', deduplicate_events=False)
+        >>> # Manually deduplicate by selecting first received
+        >>> deduplicated = select_primary_report(all_reports, strategy='first_received')
+        >>> print(f"Reduced from {len(all_reports)} to {len(deduplicated)} events")
+    """
+    if results_df.empty:
+        return results_df.copy()
+
+    if event_key_col not in results_df.columns:
+        raise ValueError(f"Column '{event_key_col}' not found in DataFrame")
+
+    if strategy == 'first_received':
+        if 'DATE_RECEIVED' not in results_df.columns:
+            raise ValueError("Strategy 'first_received' requires DATE_RECEIVED column")
+
+        # Convert to datetime if needed
+        df = results_df.copy()
+        if not pd.api.types.is_datetime64_any_dtype(df['DATE_RECEIVED']):
+            df['DATE_RECEIVED'] = pd.to_datetime(df['DATE_RECEIVED'], errors='coerce')
+
+        # Sort by EVENT_KEY and DATE_RECEIVED, then take first
+        df_sorted = df.sort_values([event_key_col, 'DATE_RECEIVED'])
+        deduplicated = df_sorted.groupby(event_key_col, as_index=False).first()
+
+    elif strategy == 'manufacturer':
+        if 'REPORT_SOURCE_CODE' not in results_df.columns:
+            # Fallback to first_received if column missing
+            return select_primary_report(results_df, event_key_col, 'first_received')
+
+        df = results_df.copy()
+        # Prefer manufacturer reports, then take first by any tie-breaker
+        df['is_manufacturer'] = df['REPORT_SOURCE_CODE'].str.lower().str.contains('manufacturer', na=False)
+        df_sorted = df.sort_values([event_key_col, 'is_manufacturer'], ascending=[True, False])
+        deduplicated = df_sorted.groupby(event_key_col, as_index=False).first()
+        deduplicated = deduplicated.drop(columns=['is_manufacturer'])
+
+    elif strategy == 'most_complete':
+        df = results_df.copy()
+        # Count non-null fields per row
+        df['_completeness'] = df.notna().sum(axis=1)
+        df_sorted = df.sort_values([event_key_col, '_completeness'], ascending=[True, False])
+        deduplicated = df_sorted.groupby(event_key_col, as_index=False).first()
+        deduplicated = deduplicated.drop(columns=['_completeness'])
+
+    else:
+        raise ValueError(f"Unknown strategy: {strategy}. "
+                        "Must be 'first_received', 'manufacturer', or 'most_complete'")
+
+    return deduplicated.reset_index(drop=True)
+
+
+def compare_report_vs_event_counts(results_df, event_key_col='EVENT_KEY',
+                                    group_by=None):
+    """
+    Compare counting by reports vs events to show potential overcounting.
+
+    Demonstrates the impact of EVENT_KEY deduplication on event counts.
+    Useful for validating analysis methods and understanding data quality.
+
+    Args:
+        results_df: DataFrame with query results
+        event_key_col: Column name for EVENT_KEY (default: 'EVENT_KEY')
+        group_by: Optional column to group by (e.g., 'year', 'BRAND_NAME')
+                 If None, returns overall counts only
+
+    Returns:
+        DataFrame with columns:
+        - [group_by column]: If group_by specified
+        - report_count: Total number of reports
+        - event_count: Number of unique events
+        - inflation_pct: Percentage inflation from counting reports vs events
+
+    Example:
+        >>> # Overall comparison
+        >>> comparison = compare_report_vs_event_counts(results)
+        >>> print(comparison)
+
+        >>> # By year
+        >>> results['year'] = pd.to_datetime(results['DATE_RECEIVED']).dt.year
+        >>> yearly = compare_report_vs_event_counts(results, group_by='year')
+        >>> print(yearly)
+    """
+    if results_df.empty:
+        cols = ['report_count', 'event_count', 'inflation_pct']
+        if group_by:
+            cols.insert(0, group_by)
+        return pd.DataFrame(columns=cols)
+
+    if event_key_col not in results_df.columns:
+        raise ValueError(f"Column '{event_key_col}' not found in DataFrame")
+
+    if group_by:
+        if group_by not in results_df.columns:
+            raise ValueError(f"Column '{group_by}' not found in DataFrame")
+
+        # Group-wise comparison
+        grouped = results_df.groupby(group_by).agg({
+            'MDR_REPORT_KEY': 'count',  # Total reports
+            event_key_col: 'nunique'    # Unique events
+        }).reset_index()
+
+        grouped.columns = [group_by, 'report_count', 'event_count']
+
+    else:
+        # Overall comparison
+        grouped = pd.DataFrame({
+            'report_count': [len(results_df)],
+            'event_count': [results_df[event_key_col].nunique()]
+        })
+
+    # Calculate inflation percentage
+    grouped['inflation_pct'] = ((grouped['report_count'] - grouped['event_count']) /
+                                grouped['event_count'] * 100).fillna(0.0)
+
+    return grouped
