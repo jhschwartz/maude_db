@@ -26,6 +26,19 @@ class TestEventKeyFunctions(unittest.TestCase):
                                  'Test Mfg C', 'Test Mfg C', 'Test Mfg C']
         })
 
+        # Create test data with null EVENT_KEYs
+        self.test_data_with_nulls = pd.DataFrame({
+            'MDR_REPORT_KEY': ['1', '2', '3', '4', '5', '6'],
+            'EVENT_KEY': [None, None, 'EVT002', 'EVT003', 'EVT003', None],
+            'DATE_RECEIVED': pd.to_datetime([
+                '2020-01-15', '2020-01-16', '2020-02-20',
+                '2020-03-15', '2020-03-16', '2020-03-17'
+            ]),
+            'EVENT_TYPE': ['Injury', 'Injury', 'Malfunction', 'Death', 'Death', 'Malfunction'],
+            'MANUFACTURER_NAME': ['Test Mfg A', 'Test Mfg A', 'Test Mfg B',
+                                 'Test Mfg C', 'Test Mfg C', 'Test Mfg D']
+        })
+
     def test_count_unique_events_basic(self):
         """Test basic event counting with duplicates."""
         counts = analysis_helpers.count_unique_events(self.test_data)
@@ -34,6 +47,33 @@ class TestEventKeyFunctions(unittest.TestCase):
         self.assertEqual(counts['unique_events'], 3)
         self.assertAlmostEqual(counts['duplication_rate'], 50.0, places=1)
         self.assertEqual(len(counts['multi_report_events']), 2)  # EVT001 and EVT003
+
+    def test_count_unique_events_with_nulls(self):
+        """Test event counting with null EVENT_KEYs (each null is unique)."""
+        counts = analysis_helpers.count_unique_events(self.test_data_with_nulls)
+
+        # 6 reports: 3 nulls (each unique) + 2 non-null unique EVENT_KEYs = 5 unique events
+        # EVT002 (1 report), EVT003 (2 reports), and 3 nulls (3 reports)
+        self.assertEqual(counts['total_reports'], 6)
+        self.assertEqual(counts['unique_events'], 5)  # 3 nulls + EVT002 + EVT003
+        # Duplication: 6 reports - 5 unique events = 1 duplicate
+        self.assertAlmostEqual(counts['duplication_rate'], 16.67, places=1)
+        # Only EVT003 has multiple reports (nulls are not in multi_report_events)
+        self.assertEqual(len(counts['multi_report_events']), 1)
+        self.assertIn('EVT003', counts['multi_report_events'])
+
+    def test_count_unique_events_all_nulls(self):
+        """Test with all null EVENT_KEYs (each should be unique)."""
+        all_null_data = pd.DataFrame({
+            'MDR_REPORT_KEY': ['1', '2', '3'],
+            'EVENT_KEY': [None, None, None]
+        })
+        counts = analysis_helpers.count_unique_events(all_null_data)
+
+        self.assertEqual(counts['total_reports'], 3)
+        self.assertEqual(counts['unique_events'], 3)  # Each null is unique
+        self.assertEqual(counts['duplication_rate'], 0.0)  # No duplicates
+        self.assertEqual(len(counts['multi_report_events']), 0)  # Nulls don't appear here
 
     def test_count_unique_events_empty(self):
         """Test with empty DataFrame."""

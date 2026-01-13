@@ -1131,6 +1131,10 @@ def count_unique_events(results_df, event_key_col='EVENT_KEY'):
     (same event reported by manufacturer, hospital, patient, etc.). This
     function helps identify the duplication rate in your dataset.
 
+    IMPORTANT: Reports with null/missing EVENT_KEY are each considered unique
+    events. A missing EVENT_KEY indicates the FDA did not assign a shared event
+    identifier, so each report represents a distinct event.
+
     Args:
         results_df: DataFrame with query results
         event_key_col: Column name for EVENT_KEY (default: 'EVENT_KEY')
@@ -1138,9 +1142,9 @@ def count_unique_events(results_df, event_key_col='EVENT_KEY'):
     Returns:
         dict with keys:
         - total_reports (int): Total number of reports (rows)
-        - unique_events (int): Number of unique EVENT_KEYs
+        - unique_events (int): Number of unique events (null EVENT_KEYs each count as 1)
         - duplication_rate (float): Percentage of reports that are duplicates (0-100)
-        - multi_report_events (list): EVENT_KEYs that have multiple reports
+        - multi_report_events (list): EVENT_KEYs that have multiple reports (excludes nulls)
 
     Example:
         >>> results = db.query_device(device_name='pacemaker')
@@ -1161,10 +1165,18 @@ def count_unique_events(results_df, event_key_col='EVENT_KEY'):
                         "EVENT_KEY column is required for event deduplication.")
 
     total_reports = len(results_df)
-    unique_events = results_df[event_key_col].nunique()
 
-    # Find EVENT_KEYs with multiple reports
-    event_counts = results_df.groupby(event_key_col).size()
+    # Count unique non-null EVENT_KEYs
+    unique_non_null_events = results_df[event_key_col].nunique()
+
+    # Count null EVENT_KEYs (each null represents a unique event)
+    null_count = results_df[event_key_col].isna().sum()
+
+    # Total unique events = non-null unique EVENT_KEYs + each null EVENT_KEY
+    unique_events = unique_non_null_events + null_count
+
+    # Find EVENT_KEYs with multiple reports (exclude nulls)
+    event_counts = results_df[results_df[event_key_col].notna()].groupby(event_key_col).size()
     multi_report_events = event_counts[event_counts > 1].index.tolist()
 
     # Calculate duplication rate
@@ -1304,6 +1316,10 @@ def compare_report_vs_event_counts(results_df, event_key_col='EVENT_KEY',
     Demonstrates the impact of EVENT_KEY deduplication on event counts.
     Useful for validating analysis methods and understanding data quality.
 
+    IMPORTANT: Null/missing EVENT_KEYs are each treated as unique events.
+    This matches FDA guidance where missing EVENT_KEY indicates each report
+    represents a distinct event.
+
     Args:
         results_df: DataFrame with query results
         event_key_col: Column name for EVENT_KEY (default: 'EVENT_KEY')
@@ -1314,7 +1330,7 @@ def compare_report_vs_event_counts(results_df, event_key_col='EVENT_KEY',
         DataFrame with columns:
         - [group_by column]: If group_by specified
         - report_count: Total number of reports
-        - event_count: Number of unique events
+        - event_count: Number of unique events (null EVENT_KEYs each count as 1)
         - inflation_pct: Percentage inflation from counting reports vs events
 
     Example:
@@ -1341,18 +1357,30 @@ def compare_report_vs_event_counts(results_df, event_key_col='EVENT_KEY',
             raise ValueError(f"Column '{group_by}' not found in DataFrame")
 
         # Group-wise comparison
+        # Need to handle null EVENT_KEYs properly (each null is unique)
+        def count_unique_with_nulls(series):
+            """Count unique values treating each null as unique."""
+            non_null_unique = series.nunique()
+            null_count = series.isna().sum()
+            return non_null_unique + null_count
+
         grouped = results_df.groupby(group_by).agg({
             'MDR_REPORT_KEY': 'count',  # Total reports
-            event_key_col: 'nunique'    # Unique events
+            event_key_col: count_unique_with_nulls  # Unique events (nulls are unique)
         }).reset_index()
 
         grouped.columns = [group_by, 'report_count', 'event_count']
 
     else:
         # Overall comparison
+        # Count null EVENT_KEYs as unique events
+        non_null_unique = results_df[event_key_col].nunique()
+        null_count = results_df[event_key_col].isna().sum()
+        unique_events = non_null_unique + null_count
+
         grouped = pd.DataFrame({
             'report_count': [len(results_df)],
-            'event_count': [results_df[event_key_col].nunique()]
+            'event_count': [unique_events]
         })
 
     # Calculate inflation percentage
