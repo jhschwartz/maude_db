@@ -1304,7 +1304,94 @@ summary = db.summarize_by_brand(results, group_column='standard_brand')
 - Preserves original brand name if no pattern matches
 - NaN values remain NaN
 
-**Related**: `find_brand_variations()`, `query_multiple_devices()`
+**Related**: `find_brand_variations()`, `query_multiple_devices()`, `hierarchical_brand_standardization()`
+
+---
+
+##### `hierarchical_brand_standardization(results_df, specific_mapping=None, family_mapping=None, manufacturer_mapping=None, source_col='BRAND_NAME')`
+
+Apply hierarchical brand name standardization with multiple levels.
+
+**Parameters**:
+- `results_df` (DataFrame): DataFrame with brand names to standardize
+- `specific_mapping` (dict, optional): Mapping for specific device models (e.g., 'ClotTriever XL')
+- `family_mapping` (dict, optional): Mapping for device families (e.g., 'ClotTriever (unspecified)')
+- `manufacturer_mapping` (dict, optional): Mapping for manufacturers (e.g., 'Inari Medical')
+- `source_col` (str, default='BRAND_NAME'): Column with original brand names
+
+**Returns**: DataFrame with three new columns:
+- `device_model`: Most specific match (from specific_mapping or family_mapping)
+- `device_family`: Family-level grouping (from family_mapping)
+- `manufacturer`: Manufacturer name (from manufacturer_mapping)
+
+**Examples**:
+
+```python
+# Define hierarchical mappings
+# IMPORTANT: List more specific patterns FIRST (first-match-wins)
+specific_models = {
+    # More specific patterns first
+    'prodigy 8f-s': 'ImperativeCare Prodigy 8F-S',  # Must come before 'prodigy 8f'
+    'prodigy 8f': 'ImperativeCare Prodigy 8F',
+    'prodigy 6f': 'ImperativeCare Prodigy 6F',
+    'prodigy 5f': 'ImperativeCare Prodigy 5F',
+    'clottriever xl': 'Inari Medical ClotTriever XL',
+    'clottriever bold': 'Inari Medical ClotTriever BOLD',
+    'flowtriever xl': 'Inari Medical FlowTriever XL',
+}
+
+device_families = {
+    'prodigy': 'ImperativeCare Prodigy (unspecified)',
+    'clottriever': 'Inari Medical ClotTriever (unspecified)',
+    'flowtriever': 'Inari Medical FlowTriever (unspecified)',
+    'lightning': 'Penumbra Lightning (unspecified)',
+}
+
+manufacturers = {
+    'prodigy': 'ImperativeCare',
+    'clottriever': 'Inari Medical',
+    'flowtriever': 'Inari Medical',
+    'lightning': 'Penumbra',
+}
+
+# Query and standardize
+results = db.query_device_catalog(devices_catalog)
+results_std = db.hierarchical_brand_standardization(
+    results,
+    specific_mapping=specific_models,
+    family_mapping=device_families,
+    manufacturer_mapping=manufacturers
+)
+
+# Analyze at different levels
+# 1. Specific models
+print(results_std['device_model'].value_counts())
+
+# 2. By manufacturer
+summary = db.summarize_by_brand(results_std, group_column='manufacturer')
+
+# 3. All ClotTriever variants together
+clottriever_all = results_std[
+    results_std['device_family'].str.contains('ClotTriever', case=False, na=False)
+]
+```
+
+**Notes**:
+- Hierarchical matching prevents double-counting: "ClotTriever XL" won't also match "ClotTriever"
+- Each level only processes items not matched by previous levels
+- Case-insensitive substring matching
+- **IMPORTANT**: More specific patterns must be listed first in each mapping (uses first-match-wins)
+  - Example: Put `'prodigy 8f-s'` before `'prodigy 8f'` to avoid "Prodigy 8F-S" matching "8F"
+  - Python 3.7+ preserves dictionary insertion order
+- Pass `None` to skip any level you don't need
+- Original `BRAND_NAME` column is preserved
+
+**Use Cases**:
+1. **Specific + Family**: Separate specific models (XL, BOLD) from generic reports
+2. **Family + Manufacturer**: Group device families, then aggregate by manufacturer
+3. **Manufacturer Only**: Simple manufacturer-level aggregation
+
+**Related**: `standardize_brand_names()`, `query_device_catalog()`, `summarize_by_brand()`
 
 ---
 

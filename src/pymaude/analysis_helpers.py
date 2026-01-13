@@ -782,6 +782,125 @@ def standardize_brand_names(results_df, mapping_dict,
     return results_df
 
 
+def hierarchical_brand_standardization(results_df,
+                                       specific_mapping=None,
+                                       family_mapping=None,
+                                       manufacturer_mapping=None,
+                                       source_col='BRAND_NAME'):
+    """
+    Apply hierarchical brand name standardization with multiple levels.
+
+    This function performs multi-level brand standardization in a single pass:
+    1. First tries to match specific device models (e.g., "ClotTriever XL")
+    2. Then tries to match device families for unmatched items (e.g., "ClotTriever (unspecified)")
+    3. Finally tries to match manufacturers for still-unmatched items (e.g., "Inari Medical")
+
+    Each level only processes items that weren't matched by the previous level,
+    preventing "ClotTriever XL" from being incorrectly matched to just "ClotTriever".
+
+    Args:
+        results_df: DataFrame with brand names to standardize
+        specific_mapping: Dict mapping patterns to specific model names
+            Example: {'clottriever xl': 'Inari Medical ClotTriever XL',
+                     'clottriever bold': 'Inari Medical ClotTriever BOLD'}
+        family_mapping: Dict mapping patterns to device family names
+            Example: {'clottriever': 'Inari Medical ClotTriever (unspecified)',
+                     'flowtriever': 'Inari Medical FlowTriever (unspecified)'}
+        manufacturer_mapping: Dict mapping patterns to manufacturer names
+            Example: {'clottriever': 'Inari Medical',
+                     'flowtriever': 'Inari Medical'}
+        source_col: Column with original brand names (default: 'BRAND_NAME')
+
+    Returns:
+        DataFrame with three new columns added:
+        - device_model: Most specific match (from specific_mapping or family_mapping)
+        - device_family: Family-level grouping (from family_mapping if available)
+        - manufacturer: Manufacturer name (from manufacturer_mapping if available)
+
+        Original rows are preserved; new columns are None for unmatched items.
+
+    Example:
+        >>> specific = {
+        ...     'clottriever xl': 'Inari Medical ClotTriever XL',
+        ...     'clottriever bold': 'Inari Medical ClotTriever BOLD'
+        ... }
+        >>> family = {
+        ...     'clottriever': 'Inari Medical ClotTriever (unspecified)',
+        ...     'flowtriever': 'Inari Medical FlowTriever (unspecified)'
+        ... }
+        >>> manufacturer = {
+        ...     'clottriever': 'Inari Medical',
+        ...     'flowtriever': 'Inari Medical'
+        ... }
+        >>> df = hierarchical_brand_standardization(
+        ...     results,
+        ...     specific_mapping=specific,
+        ...     family_mapping=family,
+        ...     manufacturer_mapping=manufacturer
+        ... )
+        >>> # Now df has device_model, device_family, and manufacturer columns
+        >>> # "ClotTriever XL" -> device_model="Inari Medical ClotTriever XL"
+        >>> # "ClotTriever" -> device_model="Inari Medical ClotTriever (unspecified)"
+        >>> # Both -> manufacturer="Inari Medical"
+
+    Notes:
+        - Pattern matching is case-insensitive substring matching
+        - More specific patterns in each mapping should be listed first (dict order matters)
+        - Pass None for any level you don't need
+        - Original BRAND_NAME column is preserved unchanged
+    """
+    if source_col not in results_df.columns:
+        raise ValueError(f"DataFrame must contain '{source_col}' column")
+
+    # Create a copy to avoid modifying the original
+    df = results_df.copy()
+
+    # Initialize result columns
+    df['device_model'] = None
+    df['device_family'] = None
+    df['manufacturer'] = None
+
+    # Helper function to match a single brand name against a mapping
+    def find_match(brand_name, mapping):
+        if pd.isna(brand_name) or mapping is None:
+            return None
+        brand_lower = str(brand_name).lower()
+        for pattern, standard_name in mapping.items():
+            if pattern.lower() in brand_lower:
+                return standard_name
+        return None
+
+    # Process each row
+    for idx, row in df.iterrows():
+        brand_name = row[source_col]
+
+        # Level 1: Try specific mapping
+        if specific_mapping:
+            specific_match = find_match(brand_name, specific_mapping)
+            if specific_match:
+                df.at[idx, 'device_model'] = specific_match
+                # Also set family if we can derive it from family_mapping
+                if family_mapping:
+                    family_match = find_match(brand_name, family_mapping)
+                    if family_match:
+                        df.at[idx, 'device_family'] = family_match
+
+        # Level 2: Try family mapping (only if no specific match found)
+        if family_mapping and df.at[idx, 'device_model'] is None:
+            family_match = find_match(brand_name, family_mapping)
+            if family_match:
+                df.at[idx, 'device_model'] = family_match
+                df.at[idx, 'device_family'] = family_match
+
+        # Level 3: Try manufacturer mapping (independent of model/family)
+        if manufacturer_mapping:
+            mfr_match = find_match(brand_name, manufacturer_mapping)
+            if mfr_match:
+                df.at[idx, 'manufacturer'] = mfr_match
+
+    return df
+
+
 # ==================== Statistical Analysis Methods ====================
 
 def create_contingency_table(results_df, row_var, col_var, normalize=False):

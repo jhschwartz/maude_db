@@ -1367,6 +1367,16 @@ class MaudeDatabase:
             results_df, mapping_dict, source_col, target_col
         )
 
+    def hierarchical_brand_standardization(self, results_df,
+                                          specific_mapping=None,
+                                          family_mapping=None,
+                                          manufacturer_mapping=None,
+                                          source_col='BRAND_NAME'):
+        """Apply hierarchical brand name standardization. See analysis_helpers module."""
+        return analysis_helpers.hierarchical_brand_standardization(
+            results_df, specific_mapping, family_mapping, manufacturer_mapping, source_col
+        )
+
     def create_contingency_table(self, results_df, row_var, col_var, normalize=False):
         """Create contingency table. See analysis_helpers module."""
         return analysis_helpers.create_contingency_table(results_df, row_var, col_var, normalize)
