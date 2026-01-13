@@ -15,7 +15,7 @@ dev: setup
 	# Install package with dev dependencies from pyproject.toml
 	venv/bin/pip install -e ".[dev]"
 
-test: setup
+test: dev
 	venv/bin/python -m pytest
 
 init-db: setup

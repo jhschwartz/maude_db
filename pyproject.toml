@@ -26,6 +26,7 @@ dependencies = [
     "requests>=2.25.0",
     "scipy>=1.7.0",
     "matplotlib>=3.3.0",
+    "ipykernel>=7.1.0"
 ]
 
 [project.optional-dependencies]
