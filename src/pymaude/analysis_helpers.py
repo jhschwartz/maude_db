@@ -905,10 +905,15 @@ def hierarchical_brand_standardization(results_df,
             family_match = find_match(brand_name, family_mapping)
             if family_match:
                 # For device_model, append (unspecified) to clarify this is a family-level match
-                # Remove existing (family) suffix if present and add (family - unspecified)
+                # But don't add it if already present
                 if '(family)' in family_match.lower():
+                    # Remove existing (family) suffix and add (family - unspecified)
                     model_name = family_match.replace('(family)', '(family - unspecified)').replace('(Family)', '(family - unspecified)')
+                elif '(unspecified)' in family_match.lower():
+                    # Already has (unspecified), use as-is
+                    model_name = family_match
                 else:
+                    # Add (unspecified) suffix
                     model_name = f"{family_match} (unspecified)"
                 df.at[idx, 'device_model'] = model_name
                 df.at[idx, 'device_family'] = family_match

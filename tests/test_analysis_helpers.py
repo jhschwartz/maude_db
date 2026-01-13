@@ -126,6 +126,13 @@ class TestAnalysisHelpers:
                 'CLOTTRIEVER CATHETER',  # Should match family but not specific
                 'FlowTriever System',
                 'Some Unknown Device'
+            ],
+            'MANUFACTURER_D_NAME': [
+                'Inari Medical ClotTriever',
+                'Inari Medical ClotTriever',
+                'Inari Medical ClotTriever',
+                'Inari Medical FlowTriever',
+                'Unknown Manufacturer'
             ]
         })
 
@@ -195,7 +202,8 @@ class TestAnalysisHelpers:
     def test_hierarchical_brand_standardization_manufacturer_only(self):
         """Test hierarchical standardization with only manufacturer mapping."""
         df = pd.DataFrame({
-            'BRAND_NAME': ['ClotTriever XL', 'FlowTriever', 'Lightning Bolt']
+            'BRAND_NAME': ['ClotTriever XL', 'FlowTriever', 'Lightning Bolt'],
+            'MANUFACTURER_D_NAME': ['Inari ClotTriever', 'Inari FlowTriever', 'Penumbra Lightning']
         })
 
         manufacturer = {
@@ -285,7 +293,8 @@ class TestAnalysisHelpers:
     def test_hierarchical_brand_standardization_custom_source_col(self):
         """Test hierarchical standardization with custom source column."""
         df = pd.DataFrame({
-            'custom_brand': ['ClotTriever XL', 'FlowTriever']
+            'custom_brand': ['ClotTriever XL', 'FlowTriever'],
+            'MANUFACTURER_D_NAME': ['Inari ClotTriever', 'Inari FlowTriever']
         })
 
         manufacturer = {
@@ -746,8 +755,10 @@ class TestAnalysisHelpersIntegration:
             'test device a': 'Device A Specific Model',
             'test device b': 'Device B Specific Model',
         }
+        # Manufacturer mapping needs to match MANUFACTURER_D_NAME column values
         manufacturer = {
-            'test device': 'Test Corp',
+            'acme': 'Test Corp',
+            'beta': 'Test Corp',
         }
 
         standardized = db_with_data.hierarchical_brand_standardization(
