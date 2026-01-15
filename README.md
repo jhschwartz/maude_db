@@ -261,7 +261,8 @@ jaschwa@umich.edu
 
 ## Acknowledgments
 
-Documentation and testing development assisted by Claude (Anthropic AI).
+This library was developed using a "Human-in-the-Loop" AI-augmented workflow. The human author conceptualized the project, designed the software architecture, and provided specific algorithmic logic. While Claude Code was used for code synthesis, bug-hunting, and documentation-writing, the human author reviewed, refined, and approved every line of code to ensure scientific accuracy and technical integrity.
+
 
 ---
 
