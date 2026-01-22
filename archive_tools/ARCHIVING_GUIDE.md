@@ -115,7 +115,7 @@ To add automatic compatibility monitoring to your GitHub repository:
 5. **Update README Badge**
    - Replace the placeholder badge with:
      ```markdown
-     [![FDA Site Compatibility](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/USERNAME/GIST_ID/raw/pymaude_fda_compatibility.json)](https://github.com/USERNAME/maude_db/actions/workflows/fda_compatibility_check.yml)
+     [![FDA Site Compatibility](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/USERNAME/GIST_ID/raw/pymaude_fda_compatibility.json)](https://github.com/jhschwartz/PyMAUDE/actions/workflows/fda_compatibility_check.yml)
      ```
 
 See [docs/github_badge_setup.md](docs/github_badge_setup.md) for detailed instructions.

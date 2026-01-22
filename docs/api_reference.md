@@ -1,6 +1,6 @@
 # API Reference
 
-Complete technical reference for the `maude_db` library.
+Complete technical reference for the `PyMAUDE` library.
 
 ## Table of Contents
 

@@ -24,7 +24,7 @@ Solutions to common problems when using `PyMAUDE`.
 **Solution**:
 ```bash
 # Ensure you're in the correct directory
-cd /path/to/maude_db
+cd /path/to/PyMAUDE
 
 # Activate virtual environment
 source venv/bin/activate  # macOS/Linux
@@ -617,7 +617,7 @@ Title: "No such column error when querying device table"
 Environment:
 - Python 3.9.7
 - macOS 13.5
-- maude_db commit abc123
+- PyMAUDE commit abc123
 
 Problem:
 Getting "sqlite3.OperationalError: no such column: generic_name"
