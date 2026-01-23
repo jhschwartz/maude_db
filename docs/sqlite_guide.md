@@ -38,7 +38,7 @@ This guide shows how to use MAUDE databases with external SQLite tools, without 
 | **SQLiteStudio** | Windows, macOS, Linux | Free | Lightweight, portable |
 | **TablePlus** | macOS, Windows, Linux | Freemium | Modern UI |
 
-All tools listed work with SQLite databases created by `maude_db`.
+All tools listed work with SQLite databases created by `PyMAUDE`.
 
 ---
 

@@ -111,7 +111,7 @@ Approximate sizes per year:
 
 The master table (MDRFOI) is only available as a comprehensive file covering all years:
 - Very large (~1+ GB)
-- Not downloaded automatically by `maude_db`
+- Not downloaded automatically by `PyMAUDE`
 - Device table contains most key fields via joins
 
 For most research, device + text tables are sufficient.
@@ -507,7 +507,7 @@ Create a README for your project:
 
 ## Environment
 - Python 3.9.7
-- maude_db version: [commit hash or release]
+- PyMAUDE version: [commit hash or release]
 - Analysis date: 2025-12-29
 
 ## Data
@@ -747,7 +747,7 @@ This workflow is ideal for researchers comfortable with SQL but not Python, or t
 #### Step 1: Initialize Database
 
 ```bash
-cd /path/to/maude_db
+cd /path/to/PyMAUDE
 ./init_full_db.sh
 ```
 
@@ -897,7 +897,7 @@ For publications using MAUDE data:
 > injuries, and malfunctions. Reports are unverified allegations and do not
 > establish causation. We used MAUDE data for signal detection and hypothesis
 > generation, recognizing inherent reporting biases and the lack of denominator
-> data on total devices in use. Analysis was performed using the maude_db
+> data on total devices in use. Analysis was performed using the PyMAUDE
 > Python library (version X.X, Schwartz 2025).
 
 ---
@@ -917,13 +917,13 @@ https://www.fda.gov/medical-devices/mandatory-reporting-requirements-manufacture
 ### Citing This Library
 
 ```
-Schwartz, J. (2025). maude_db: A Python library for FDA MAUDE database analysis.
-https://github.com/jhschwartz/maude_db
+Schwartz, J. (2025). PyMAUDE: A Python library for FDA MAUDE database analysis.
+https://github.com/jhschwartz/pymaude
 ```
 
 ### In-Text Example
 
-> We queried the FDA MAUDE database (FDA 2024) using the maude_db Python
+> We queried the FDA MAUDE database (FDA 2024) using the PyMAUDE Python
 > library (Schwartz 2025) for all adverse event reports involving thrombectomy
 > devices from 2018-2022.
 

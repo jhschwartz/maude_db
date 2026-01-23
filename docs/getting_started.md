@@ -1,6 +1,6 @@
 # Getting Started with PyMAUDE
 
-This tutorial walks you through your first analysis using the `maude_db` library.
+This tutorial walks you through your first analysis using the `PyMAUDE` library.
 
 ## Prerequisites
 
@@ -20,7 +20,7 @@ SQL knowledge is helpful for custom queries but not required for basic usage.
 The easiest way to set up your environment:
 
 ```bash
-# Navigate to the maude_db directory
+# Navigate to the PyMAUDE directory
 cd PyMAUDE
 
 # Create virtual environment and install dependencies
@@ -46,7 +46,7 @@ If you see "Success!", you're ready to go!
 If you prefer to set up manually:
 
 ```bash
-# Navigate to the maude_db directory
+# Navigate to the PyMAUDE directory
 cd PyMAUDE
 
 # Create virtual environment
@@ -359,7 +359,7 @@ If you prefer to work with SQLite tools (DB Browser, DBeaver, etc.) instead of P
 
 1. **Initialize the database:**
    ```bash
-   cd /path/to/maude_db
+   cd /path/to/PyMAUDE
    ./init_full_db.sh
    ```
 
