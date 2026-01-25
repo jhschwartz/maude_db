@@ -13,6 +13,17 @@
 
 --> should integration tests spot check actual data from fda?? 
 
+--> must update init_db, notebooks, and archive_tools
+--> must go back through docs and confirm no references to old naming 
+--> must get rid of the hierarchial search code and references to it 
+--> must go through code and delete functionality that won't be used
+--> must use the widget (and other stuff) on real data to make sure it works 
+
+
+--> need to do AI categorization implementation and analysis -- regular LLM or specific model? 
+
+
+--> must review final codebase, tests, and docs in depth and update as necessary 
 
 
 ## Future Enhancements
