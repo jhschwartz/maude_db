@@ -381,7 +381,7 @@ class TestInputValidation:
 
     def test_non_string_term_raises_error(self, db_with_search_index):
         """Test that non-string terms raise ValueError."""
-        with pytest.raises(ValueError, match="must be a list"):
+        with pytest.raises(ValueError, match="must be a string or list"):
             db_with_search_index.search_by_device_names([123])
 
     def test_invalid_criteria_type_raises_error(self, db_with_search_index):
