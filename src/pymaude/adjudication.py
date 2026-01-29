@@ -45,6 +45,7 @@ class AdjudicationRecord:
         date: Timestamp of decision
         strategy_version: Version of DeviceSearchStrategy used
         device_info: Optional device details for reference
+        search_group: Optional search group identifier for grouped searches
     """
     mdr_report_key: str
     decision: str  # "include" or "exclude"
@@ -53,6 +54,7 @@ class AdjudicationRecord:
     date: datetime = field(default_factory=datetime.now)
     strategy_version: str = ""
     device_info: str = ""  # Optional: brand/generic name for context
+    search_group: str = ""  # Optional: search group for grouped strategies
 
 
 class AdjudicationLog:
@@ -86,7 +88,7 @@ class AdjudicationLog:
 
     Note:
         CSV format for git-friendly diffs and Excel compatibility.
-        Columns: mdr_report_key, decision, reason, reviewer, date, strategy_version, device_info
+        Columns: mdr_report_key, decision, reason, reviewer, date, strategy_version, device_info, search_group
 
     References:
         PRISMA 2020: Selection process documentation (Item 16b)
@@ -108,7 +110,7 @@ class AdjudicationLog:
             self._load_from_csv()
 
     def add(self, mdr_key: str, decision: str, reason: str, reviewer: str,
-            strategy_version: str = "", device_info: str = "") -> None:
+            strategy_version: str = "", device_info: str = "", search_group: str = "") -> None:
         """
         Add adjudication decision.
 
@@ -119,6 +121,7 @@ class AdjudicationLog:
             reviewer: Name/ID of reviewer
             strategy_version: Optional version of search strategy
             device_info: Optional device name/info for context
+            search_group: Optional search group identifier for grouped strategies
 
         Raises:
             ValueError: If decision is not "include" or "exclude"
@@ -133,7 +136,8 @@ class AdjudicationLog:
             reviewer=reviewer,
             date=datetime.now(),
             strategy_version=strategy_version,
-            device_info=device_info
+            device_info=device_info,
+            search_group=search_group
         )
         self.records.append(record)
 
@@ -151,7 +155,7 @@ class AdjudicationLog:
             writer = csv.writer(f)
             writer.writerow([
                 'mdr_report_key', 'decision', 'reason', 'reviewer',
-                'date', 'strategy_version', 'device_info'
+                'date', 'strategy_version', 'device_info', 'search_group'
             ])
 
             for record in self.records:
@@ -162,7 +166,8 @@ class AdjudicationLog:
                     record.reviewer,
                     record.date.isoformat(),
                     record.strategy_version,
-                    record.device_info
+                    record.device_info,
+                    record.search_group
                 ])
 
     @classmethod
@@ -190,6 +195,7 @@ class AdjudicationLog:
         Internal: Load records from CSV file.
 
         Parses CSV and populates self.records list.
+        Backward compatible with CSVs that don't have search_group column.
         """
         self.records = []
 
@@ -211,7 +217,8 @@ class AdjudicationLog:
                         reviewer=row.get('reviewer', ''),
                         date=date,
                         strategy_version=row.get('strategy_version', ''),
-                        device_info=row.get('device_info', '')
+                        device_info=row.get('device_info', ''),
+                        search_group=row.get('search_group', '')  # Backward compatible
                     )
                     self.records.append(record)
         except (csv.Error, KeyError) as e:
@@ -248,7 +255,7 @@ class AdjudicationLog:
             # Return empty DataFrame with correct columns
             return pd.DataFrame(columns=[
                 'mdr_report_key', 'decision', 'reason', 'reviewer',
-                'date', 'strategy_version', 'device_info'
+                'date', 'strategy_version', 'device_info', 'search_group'
             ])
 
         data = []
@@ -260,7 +267,8 @@ class AdjudicationLog:
                 'reviewer': record.reviewer,
                 'date': record.date,
                 'strategy_version': record.strategy_version,
-                'device_info': record.device_info
+                'device_info': record.device_info,
+                'search_group': record.search_group
             })
 
         return pd.DataFrame(data)

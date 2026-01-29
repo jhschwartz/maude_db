@@ -127,6 +127,112 @@ strategy.to_yaml('search_strategies/venous_stent_v1.yaml')
 - Iterate narrow criteria to balance precision/recall
 - Version control YAML files in git
 
+#### Grouped Search Strategies
+
+For studies comparing multiple device types, use **grouped search** (dict format) to track group membership through the workflow.
+
+**When to use grouped searches:**
+- Comparing different device categories (e.g., mechanical vs. aspiration thrombectomy)
+- Analyzing subgroups separately in results
+- Reporting stratified PRISMA counts by device type
+
+**Grouped strategy example:**
+
+```python
+strategy = DeviceSearchStrategy(
+    name="thrombectomy_devices",
+    description="Thrombectomy devices grouped by mechanism",
+    version="1.0.0",
+    author="Your Name",
+
+    # Dict format: {group_name: criteria}
+    broad_criteria={
+        'mechanical': [['argon', 'cleaner'], 'angiojet'],
+        'aspiration': ['penumbra'],
+        'retrieval': 'flowtriever'
+    },
+
+    narrow_criteria={
+        'mechanical': [['argon', 'cleaner', 'thromb']],
+        'aspiration': [['penumbra', 'indigo']],
+        'retrieval': [['flowtriever', 'venous']]
+    },
+
+    # Exclusion patterns apply to all groups
+    exclusion_patterns=['dental', 'ultrasonic'],
+
+    search_rationale="""
+    Grouped by thrombectomy mechanism:
+    - Mechanical: Rotational atherectomy (Argon Cleaner, AngioJet)
+    - Aspiration: Catheter-based aspiration (Penumbra)
+    - Retrieval: Mechanical retrieval systems (FlowTriever)
+    """
+)
+
+# Save grouped strategy
+strategy.to_yaml('search_strategies/thrombectomy_grouped_v1.yaml')
+```
+
+**Key requirements for grouped searches:**
+- Both `broad_criteria` and `narrow_criteria` must be dicts
+- Both must have matching group keys (same group names)
+- Exclusion patterns are global (apply to all groups)
+- Output DataFrames include `search_group` column
+
+**Group membership flows through workflow:**
+
+```python
+# Apply grouped strategy
+included, excluded, needs_review = strategy.apply(db, start_date='2019-01-01')
+
+# All DataFrames have search_group column
+print(included['search_group'].value_counts())
+# Output:
+#   mechanical    45
+#   aspiration    23
+#   retrieval     12
+
+# Adjudication tracks group membership
+log = AdjudicationLog('adjudication/thrombectomy_grouped.csv')
+for idx, row in needs_review.iterrows():
+    decision = manual_review(row)
+    log.add(
+        row['MDR_REPORT_KEY'],
+        decision,
+        'Reviewed manually',
+        'Reviewer Name',
+        strategy.version,
+        device_info=row['BRAND_NAME'],
+        search_group=row['search_group']  # Track group
+    )
+log.to_csv()
+
+# Group-aware analysis
+summary = db.summarize_by_brand(included)  # Groups preserved
+comparison = db.event_type_comparison(included)  # Chi-square by group
+```
+
+**YAML format for grouped strategies:**
+
+```yaml
+broad_criteria:
+  mechanical:
+    - ['argon', 'cleaner']
+    - ['angiojet']
+  aspiration:
+    - 'penumbra'
+  retrieval:
+    - 'flowtriever'
+
+narrow_criteria:
+  mechanical:
+    - ['argon', 'cleaner', 'thromb']
+  aspiration:
+    - ['penumbra', 'indigo']
+  retrieval:
+    - ['flowtriever', 'venous']
+```
+
 ---
 
 ### Step 2: Apply Search Strategy
@@ -184,10 +290,15 @@ for idx, row in needs_review.iterrows():
     decision = input("Include? (y/n): ")
     reason = input("Reason: ")
 
+    # Track search_group if using grouped strategy
+    search_group = row.get('search_group', '')
+
     if decision.lower() == 'y':
-        log.add(mdr_key, 'include', reason, 'Reviewer Name', strategy.version)
+        log.add(mdr_key, 'include', reason, 'Reviewer Name', strategy.version,
+                device_info=brand, search_group=search_group)
     else:
-        log.add(mdr_key, 'exclude', reason, 'Reviewer Name', strategy.version)
+        log.add(mdr_key, 'exclude', reason, 'Reviewer Name', strategy.version,
+                device_info=brand, search_group=search_group)
 
 # Save decisions
 log.to_csv()

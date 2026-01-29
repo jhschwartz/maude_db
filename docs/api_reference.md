@@ -2298,18 +2298,43 @@ strategy = DeviceSearchStrategy(
 - `author` (str, optional): Strategy author name
 - `created_at` (datetime, auto): Creation timestamp
 - `updated_at` (datetime, auto): Last modification timestamp
-- `broad_criteria` (list): Broad search criteria (PyMAUDE list format)
-- `narrow_criteria` (list): Refined search criteria
+- `broad_criteria` (list or dict): Broad search criteria (see formats below)
+- `narrow_criteria` (list or dict): Refined search criteria (must match broad type)
 - `known_variants` (list, optional): Device name variants for documentation
 - `exclusion_patterns` (list, optional): Known false positive patterns
 - `inclusion_overrides` (list, optional): MDR_REPORT_KEYs to force-include
 - `exclusion_overrides` (list, optional): MDR_REPORT_KEYs to force-exclude
 - `search_rationale` (str, optional): Documentation of search approach
 
-**Boolean Search Format:**
+**Boolean Search Format (Standard):**
 - OR: `['term1', 'term2']`
 - AND: `[['term1', 'term2']]`
 - Complex: `[['argon', 'cleaner'], 'angiojet']` = `(argon AND cleaner) OR angiojet`
+
+**Grouped Search Format (Dict):**
+For comparing multiple device types, use dict format to track group membership:
+
+```python
+strategy = DeviceSearchStrategy(
+    name="thrombectomy_grouped",
+    broad_criteria={
+        'mechanical': [['argon', 'cleaner'], 'angiojet'],
+        'aspiration': 'penumbra',
+        'retrieval': 'flowtriever'
+    },
+    narrow_criteria={
+        'mechanical': [['argon', 'cleaner', 'thromb']],
+        'aspiration': [['penumbra', 'indigo']],
+        'retrieval': [['flowtriever', 'venous']]
+    }
+)
+# Output DataFrames will include 'search_group' column
+```
+
+**Requirements for grouped searches:**
+- Both `broad_criteria` and `narrow_criteria` must be dicts
+- Both must have matching group keys
+- Output DataFrames include `search_group` column
 
 ---
 
@@ -2504,7 +2529,7 @@ log = AdjudicationLog('adjudication/my_decisions.csv')
 
 ### Methods
 
-#### `add(mdr_key, decision, reason, reviewer, strategy_version="", device_info="")`
+#### `add(mdr_key, decision, reason, reviewer, strategy_version="", device_info="", search_group="")`
 
 Add an adjudication decision to the log.
 
@@ -2515,6 +2540,7 @@ Add an adjudication decision to the log.
 - `reviewer` (str): Name or ID of reviewer making decision
 - `strategy_version` (str, optional): Version of search strategy being used
 - `device_info` (str, optional): Device name/info for context
+- `search_group` (str, optional): Search group identifier for grouped strategies
 
 **Returns**: None
 
@@ -2525,12 +2551,14 @@ Add an adjudication decision to the log.
 ```python
 log = AdjudicationLog('adjudication/devices.csv')
 
-# Add inclusion decision
+# Add inclusion decision (standard)
 log.add('1234567', 'include', 'Matches device criteria', 'Jake',
         strategy_version='v1.0', device_info='Argon Cleaner 15')
 
-# Add exclusion decision
-log.add('7654321', 'exclude', 'Ultrasonic cleaner (false positive)', 'Jake')
+# Add decision with search group (for grouped strategies)
+log.add('2345678', 'include', 'Matches criteria', 'Jake',
+        strategy_version='v1.0', device_info='Penumbra Indigo',
+        search_group='aspiration')
 
 # Save decisions
 log.to_csv()
@@ -2540,6 +2568,7 @@ log.to_csv()
 - Decisions are added to memory; call `to_csv()` to persist
 - Timestamp is automatically recorded
 - All parameters are stored for PRISMA reporting
+- For grouped strategies, track `search_group` from DataFrame to maintain group membership
 
 ---
 
@@ -2565,7 +2594,8 @@ log.to_csv()
 - Creates parent directories if they don't exist
 - Overwrites existing file with all current decisions
 - CSV format is git-friendly and Excel-compatible
-- CSV columns: mdr_report_key, decision, reason, reviewer, date, strategy_version, device_info
+- CSV columns: mdr_report_key, decision, reason, reviewer, date, strategy_version, device_info, search_group
+- Backward compatible: Old CSVs without search_group column load with empty string default
 
 ---
 

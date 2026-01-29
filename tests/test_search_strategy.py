@@ -14,6 +14,7 @@ Tests cover:
 import pytest
 import tempfile
 import yaml
+import csv
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
@@ -350,6 +351,150 @@ class TestAdjudicationLog:
         assert isinstance(df, pd.DataFrame)
         assert len(df) == 0
         assert 'mdr_report_key' in df.columns
+
+
+class TestDeviceSearchStrategyGrouped:
+    """Test DeviceSearchStrategy with grouped (dict) criteria."""
+
+    def test_mixed_criteria_raises_error(self):
+        """Test error when broad is dict but narrow is list."""
+        strategy = DeviceSearchStrategy(
+            name="test",
+            description="Test",
+            broad_criteria={'mechanical': [['argon', 'cleaner']]},
+            narrow_criteria=[['argon', 'cleaner', 'thromb']]  # List, not dict
+        )
+
+        # Create minimal test database
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db_path = Path(tmp_dir) / "test.db"
+            db = MaudeDatabase(db_path)
+
+            with pytest.raises(ValueError, match="must both be dict.*or both be list"):
+                strategy.apply(db)
+
+    def test_dict_criteria_matching_keys_required(self):
+        """Test error when broad/narrow have different keys."""
+        strategy = DeviceSearchStrategy(
+            name="test",
+            description="Test",
+            broad_criteria={'mechanical': [['argon']], 'aspiration': ['penumbra']},
+            narrow_criteria={'mechanical': [['argon', 'cleaner']]}  # Missing 'aspiration'
+        )
+
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db_path = Path(tmp_dir) / "test.db"
+            db = MaudeDatabase(db_path)
+
+            with pytest.raises(ValueError, match="must have matching group keys"):
+                strategy.apply(db)
+
+    def test_grouped_yaml_roundtrip(self, tmp_path):
+        """Test YAML save/load with dict criteria."""
+        strategy = DeviceSearchStrategy(
+            name="thrombectomy_grouped",
+            description="Grouped thrombectomy devices",
+            broad_criteria={
+                'mechanical': [['argon', 'cleaner'], 'angiojet'],
+                'aspiration': 'penumbra'
+            },
+            narrow_criteria={
+                'mechanical': [['argon', 'cleaner', 'thromb']],
+                'aspiration': [['penumbra', 'indigo']]
+            },
+            exclusion_patterns=['dental']
+        )
+
+        # Save to YAML
+        yaml_path = tmp_path / "grouped_strategy.yaml"
+        strategy.to_yaml(yaml_path)
+
+        # Load from YAML
+        loaded = DeviceSearchStrategy.from_yaml(yaml_path)
+
+        # Verify dict structure preserved
+        assert isinstance(loaded.broad_criteria, dict)
+        assert isinstance(loaded.narrow_criteria, dict)
+        assert set(loaded.broad_criteria.keys()) == {'mechanical', 'aspiration'}
+        assert set(loaded.narrow_criteria.keys()) == {'mechanical', 'aspiration'}
+        assert loaded.broad_criteria['mechanical'] == [['argon', 'cleaner'], 'angiojet']
+        assert loaded.narrow_criteria['aspiration'] == [['penumbra', 'indigo']]
+
+
+class TestAdjudicationLogGrouped:
+    """Test AdjudicationLog with search_group tracking."""
+
+    def test_add_with_search_group(self, tmp_path):
+        """Test adding decision with search_group."""
+        log_path = tmp_path / "adjudication.csv"
+        log = AdjudicationLog(log_path)
+
+        log.add('1234567', 'include', 'Matches device', 'Jake',
+                strategy_version='1.0.0', device_info='Device A', search_group='mechanical')
+
+        assert len(log.records) == 1
+        assert log.records[0].search_group == 'mechanical'
+
+    def test_csv_roundtrip_with_search_group(self, tmp_path):
+        """Test CSV save/load preserves search_group."""
+        log_path = tmp_path / "adjudication.csv"
+
+        # Create and populate log with search groups
+        log = AdjudicationLog(log_path)
+        log.add('1234567', 'include', 'Test', 'Jake', search_group='mechanical')
+        log.add('7654321', 'exclude', 'Test', 'Sarah', search_group='aspiration')
+        log.to_csv()
+
+        # Load from CSV
+        loaded = AdjudicationLog.from_csv(log_path)
+
+        assert len(loaded.records) == 2
+        assert loaded.records[0].search_group == 'mechanical'
+        assert loaded.records[1].search_group == 'aspiration'
+
+    def test_backward_compatibility_old_csv(self, tmp_path):
+        """Test loading old CSV without search_group column."""
+        log_path = tmp_path / "old_adjudication.csv"
+
+        # Create old-style CSV without search_group column
+        with open(log_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                'mdr_report_key', 'decision', 'reason', 'reviewer',
+                'date', 'strategy_version', 'device_info'
+            ])
+            writer.writerow([
+                '1234567', 'include', 'Test reason', 'Jake',
+                '2024-01-01T12:00:00', '1.0.0', 'Device A'
+            ])
+
+        # Load should work without error, search_group defaults to empty string
+        log = AdjudicationLog.from_csv(log_path)
+        assert len(log.records) == 1
+        assert log.records[0].search_group == ''
+
+    def test_to_dataframe_includes_search_group(self, tmp_path):
+        """Test DataFrame export includes search_group column."""
+        log_path = tmp_path / "adjudication.csv"
+        log = AdjudicationLog(log_path)
+
+        log.add('1234567', 'include', 'Test', 'Jake', search_group='mechanical')
+        log.add('7654321', 'exclude', 'Test', 'Sarah', search_group='aspiration')
+
+        df = log.to_dataframe()
+        assert 'search_group' in df.columns
+        assert df['search_group'].tolist() == ['mechanical', 'aspiration']
+
+    def test_empty_log_dataframe_has_search_group_column(self, tmp_path):
+        """Test that empty log DataFrame includes search_group column."""
+        log_path = tmp_path / "empty.csv"
+        log = AdjudicationLog(log_path)
+
+        df = log.to_dataframe()
+        assert 'search_group' in df.columns
+        assert len(df) == 0
 
 
 # Optional: Integration test with real database (marked as integration test)

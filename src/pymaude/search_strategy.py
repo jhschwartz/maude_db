@@ -80,11 +80,20 @@ class DeviceSearchStrategy:
         strategy = DeviceSearchStrategy.from_yaml('strategies/my_strategy.yaml')
 
     Note:
-        Boolean search criteria use PyMAUDE's list format:
+        Boolean search criteria support two formats:
+
+        Standard (list) format:
         - OR: ['term1', 'term2']
         - AND: [['term1', 'term2']]
         - Complex: [['argon', 'cleaner'], 'angiojet']
           Equivalent to: (argon AND cleaner) OR angiojet
+
+        Grouped (dict) format:
+        - {'group1': criteria1, 'group2': criteria2}
+        - Each group's criteria can use standard list format
+        - Both broad_criteria and narrow_criteria must have matching group keys
+        - Output DataFrames include search_group column for group membership
+        - Example: {'mechanical': [['argon', 'cleaner']], 'aspiration': 'penumbra'}
 
     References:
         PRISMA 2020: https://www.prisma-statement.org/
@@ -99,9 +108,9 @@ class DeviceSearchStrategy:
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 
-    # Search criteria (list format matching MaudeDatabase.search_by_device_names)
-    broad_criteria: Union[List, str] = field(default_factory=list)
-    narrow_criteria: Union[List, str] = field(default_factory=list)
+    # Search criteria (list, str, or dict format matching MaudeDatabase.search_by_device_names)
+    broad_criteria: Union[List, str, Dict] = field(default_factory=list)
+    narrow_criteria: Union[List, str, Dict] = field(default_factory=list)
 
     # Known device variants (for documentation/future fuzzy matching)
     known_variants: List[Dict[str, str]] = field(default_factory=list)
@@ -141,8 +150,18 @@ class DeviceSearchStrategy:
             - excluded: Reports definitively excluded (false positives + manual exclusions)
             - needs_review: Reports requiring manual adjudication (broad - narrow - excluded)
 
+            When using dict criteria (grouped search), all DataFrames include search_group column.
+
         Raises:
             ValueError: If search criteria are empty or invalid
+
+        Note:
+            Supports both list and dict criteria formats:
+            - List format: [['term1', 'term2'], 'term3'] for standard searches
+            - Dict format: {'group1': [...], 'group2': [...]} for grouped searches
+
+            When using dict format, both broad_criteria and narrow_criteria must be dicts
+            with matching group keys.
         """
         from .database import MaudeDatabase
 
@@ -155,6 +174,31 @@ class DeviceSearchStrategy:
             raise ValueError("broad_criteria cannot be empty")
         if not self.narrow_criteria:
             raise ValueError("narrow_criteria cannot be empty")
+
+        # Check if using grouped search (dict format)
+        broad_is_dict = isinstance(self.broad_criteria, dict)
+        narrow_is_dict = isinstance(self.narrow_criteria, dict)
+
+        # Validate both criteria have same type (both dict or both non-dict)
+        if broad_is_dict != narrow_is_dict:
+            raise ValueError(
+                "broad_criteria and narrow_criteria must both be dict (for grouped search) "
+                "or both be list/string (for standard search). "
+                f"Got broad_criteria type: {type(self.broad_criteria).__name__}, "
+                f"narrow_criteria type: {type(self.narrow_criteria).__name__}"
+            )
+
+        # If dict format, validate matching keys
+        if broad_is_dict:
+            broad_keys = set(self.broad_criteria.keys())
+            narrow_keys = set(self.narrow_criteria.keys())
+            if broad_keys != narrow_keys:
+                raise ValueError(
+                    "broad_criteria and narrow_criteria must have matching group keys. "
+                    f"broad has: {sorted(broad_keys)}, narrow has: {sorted(narrow_keys)}"
+                )
+            # Use grouped search workflow
+            return self._apply_grouped(db, name_column, start_date, end_date)
 
         # Step 1: Broad search
         broad_results = db.search_by_device_names(
@@ -210,6 +254,117 @@ class DeviceSearchStrategy:
             excluded = pd.DataFrame(columns=broad_results.columns)
 
         # Step 5: Apply manual overrides
+        included = narrow_results.copy()
+
+        # Add manually included reports
+        if self.inclusion_overrides:
+            inclusion_keys = set(str(k) for k in self.inclusion_overrides)
+            manual_includes = needs_review[
+                needs_review['MDR_REPORT_KEY'].astype(str).isin(inclusion_keys)
+            ]
+            if len(manual_includes) > 0:
+                included = pd.concat([included, manual_includes], ignore_index=True)
+                needs_review = needs_review[
+                    ~needs_review['MDR_REPORT_KEY'].astype(str).isin(inclusion_keys)
+                ]
+
+        # Move manually excluded reports to excluded
+        if self.exclusion_overrides:
+            exclusion_keys = set(str(k) for k in self.exclusion_overrides)
+
+            # Check both needs_review and included for manual exclusions
+            manual_excludes_from_review = needs_review[
+                needs_review['MDR_REPORT_KEY'].astype(str).isin(exclusion_keys)
+            ]
+            manual_excludes_from_included = included[
+                included['MDR_REPORT_KEY'].astype(str).isin(exclusion_keys)
+            ]
+
+            if len(manual_excludes_from_review) > 0:
+                excluded = pd.concat([excluded, manual_excludes_from_review], ignore_index=True)
+                needs_review = needs_review[
+                    ~needs_review['MDR_REPORT_KEY'].astype(str).isin(exclusion_keys)
+                ]
+
+            if len(manual_excludes_from_included) > 0:
+                excluded = pd.concat([excluded, manual_excludes_from_included], ignore_index=True)
+                included = included[
+                    ~included['MDR_REPORT_KEY'].astype(str).isin(exclusion_keys)
+                ]
+
+        return included, excluded, needs_review
+
+    def _apply_grouped(self, db, name_column: str,
+                       start_date: Optional[str], end_date: Optional[str]) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """
+        Apply search strategy with grouped dict criteria.
+
+        Internal method for handling dict-based (grouped) search criteria.
+        Preserves search_group column throughout the PRISMA workflow.
+
+        Args:
+            db: MaudeDatabase instance
+            name_column: Column for substring matching
+            start_date: Optional start date
+            end_date: Optional end date
+
+        Returns:
+            Tuple of (included, excluded, needs_review) DataFrames with search_group column
+        """
+        # Step 1 & 2: Broad and narrow searches (search_by_device_names handles dict input)
+        broad_results = db.search_by_device_names(
+            self.broad_criteria,
+            start_date=start_date,
+            end_date=end_date,
+            deduplicate_events=True
+        )
+
+        narrow_results = db.search_by_device_names(
+            self.narrow_criteria,
+            start_date=start_date,
+            end_date=end_date,
+            deduplicate_events=True
+        )
+
+        # Step 3: Calculate difference (preserves search_group column)
+        narrow_keys = set(narrow_results['MDR_REPORT_KEY'].astype(str))
+        needs_review = broad_results[
+            ~broad_results['MDR_REPORT_KEY'].astype(str).isin(narrow_keys)
+        ].copy()
+
+        # Step 4: Apply exclusion patterns (same logic as list mode, search_group preserved)
+        excluded_list = []
+        if self.exclusion_patterns:
+            # Check concatenated name column if available
+            if name_column in needs_review.columns:
+                for pattern in self.exclusion_patterns:
+                    mask = needs_review[name_column].astype(str).str.contains(
+                        pattern, case=False, na=False
+                    )
+                    excluded_list.append(needs_review[mask])
+                    needs_review = needs_review[~mask]
+            else:
+                # Fallback: check BRAND_NAME, GENERIC_NAME, MANUFACTURER_D_NAME
+                for pattern in self.exclusion_patterns:
+                    mask = pd.Series([False] * len(needs_review), index=needs_review.index)
+
+                    for col in ['BRAND_NAME', 'GENERIC_NAME', 'MANUFACTURER_D_NAME']:
+                        if col in needs_review.columns:
+                            mask |= needs_review[col].astype(str).str.contains(
+                                pattern, case=False, na=False
+                            )
+
+                    excluded_list.append(needs_review[mask])
+                    needs_review = needs_review[~mask]
+
+        # Combine all excluded reports (preserves search_group)
+        if excluded_list:
+            excluded = pd.concat(excluded_list, ignore_index=True)
+        else:
+            # Empty DataFrame with same columns as broad_results (including search_group)
+            excluded = pd.DataFrame(columns=broad_results.columns)
+
+        # Step 5: Apply manual overrides (search_group inherited from source DataFrame)
         included = narrow_results.copy()
 
         # Add manually included reports
