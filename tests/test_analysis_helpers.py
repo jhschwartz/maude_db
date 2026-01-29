@@ -123,6 +123,266 @@ class TestAnalysisHelpers:
         assert 'cleaned_brand' in result.columns
         assert result['cleaned_brand'].tolist() == ['Venovo', 'Vici']
 
+    def test_combine_device_names_search_groups_preserve_groups(self):
+        data = {
+            'search_group': [
+                'group-A',
+                'group-B',
+                'group-B',
+                'group-B',
+                'group-C',
+                'group-D',
+                'group-D',
+                'group-D',
+                
+            ],
+            'id': [1, 2, 3, 4, 5, 6, 7, 8]
+        }
+
+        df = pd.DataFrame(data)
+        
+        result = analysis_helpers._combine_device_names_search_groups(df, ['group-A', 'group-B', 'group-C'])
+
+        expected = {
+            'search_group': [
+                'group-A',
+                'group-B',
+                'group-B',
+                'group-B',
+                'group-C'
+            ],
+            'id': [1, 2, 3, 4, 5]
+        }
+        expected = pd.DataFrame(expected)
+
+        pd.testing.assert_frame_equal(result, expected)
+
+
+    def test_combine_device_names_search_groups_do_not_preserve_groups(self):
+        data = {
+            'search_group': [
+                'group-A',
+                'group-B',
+                'group-B',
+                'group-B',
+                'group-C',
+                'group-D',
+                'group-D',
+                'group-D',
+                
+            ],
+            'id': [1, 2, 3, 4, 5, 6, 7, 8]
+        }
+
+        df = pd.DataFrame(data)
+        
+        result = analysis_helpers._combine_device_names_search_groups(df, ['group-A', 'group-B', 'group-C'], preserve_groups=False)
+
+        expected = {
+            'id': [1, 2, 3, 4, 5]
+        }
+        expected = pd.DataFrame(expected)
+
+        pd.testing.assert_frame_equal(result, expected)
+
+
+    def test_combine_device_names_search_groups_alt_group_col(self):
+        data = {
+            'other_search_group': [
+                'group-A',
+                'group-B',
+                'group-B',
+                'group-B',
+                'group-C',
+                'group-D',
+                'group-D',
+                'group-D',
+                
+            ],
+            'id': [1, 2, 3, 4, 5, 6, 7, 8]
+        }
+
+        df = pd.DataFrame(data)
+        
+        result = analysis_helpers._combine_device_names_search_groups(df, ['group-A', 'group-B', 'group-C'], group_var='other_search_group')
+
+        expected = {
+            'other_search_group': [
+                'group-A',
+                'group-B',
+                'group-B',
+                'group-B',
+                'group-C'
+            ],
+            'id': [1, 2, 3, 4, 5]
+        }
+        expected = pd.DataFrame(expected)
+
+        pd.testing.assert_frame_equal(result, expected)
+
+
+    def test_remap_device_groups_basic(self):
+        """Test basic remapping with all groups mapped."""
+        data = {
+            'search_group': [
+                'group-A',
+                'group-B',
+                'group-B',
+                'group-B',
+                'group-C',
+                'group-D',
+                'group-D',
+                'group-D',
+            ],
+            'id': [1, 2, 3, 4, 5, 6, 7, 8]
+        }
+
+        df = pd.DataFrame(data)
+
+        result = analysis_helpers.remap_device_groups(df, new_group_mapping={
+            'group-I': 'group-A',
+            'group-II': ['group-B', 'group-C', 'group-D']
+        })
+
+        expected = {
+            'search_group': [
+                'group-I',
+                'group-II',
+                'group-II',
+                'group-II',
+                'group-II',
+                'group-II',
+                'group-II',
+                'group-II',
+            ],
+            'id': [1, 2, 3, 4, 5, 6, 7, 8]
+        }
+        expected = pd.DataFrame(expected)
+
+        pd.testing.assert_frame_equal(result, expected)
+
+    def test_remap_device_groups_single_str_value(self):
+        """Test remapping with single string value (rename)."""
+        df = pd.DataFrame({
+            'search_group': ['old-name', 'old-name', 'other'],
+            'id': [1, 2, 3]
+        })
+
+        result = analysis_helpers.remap_device_groups(df, new_group_mapping={
+            'new-name': 'old-name',
+            'other-new': 'other'
+        })
+
+        assert result['search_group'].tolist() == ['new-name', 'new-name', 'other-new']
+
+    def test_remap_device_groups_missing_column_raises(self):
+        """Test that missing group column raises ValueError."""
+        df = pd.DataFrame({'other_col': [1, 2, 3]})
+
+        with pytest.raises(ValueError, match="must contain 'search_group' column"):
+            analysis_helpers.remap_device_groups(df, new_group_mapping={'new': 'old'})
+
+    def test_remap_device_groups_duplicate_old_group_raises(self):
+        """Test that mapping same old group to multiple new groups raises ValueError."""
+        df = pd.DataFrame({
+            'search_group': ['group-A', 'group-B'],
+            'id': [1, 2]
+        })
+
+        with pytest.raises(ValueError, match="assigned to more than one new group"):
+            analysis_helpers.remap_device_groups(df, new_group_mapping={
+                'new-1': 'group-A',
+                'new-2': ['group-A', 'group-B']  # group-A appears twice
+            })
+
+    def test_remap_device_groups_unmapped_raises_by_default(self):
+        """Test that unmapped groups raise ValueError by default (allow_unspecified=False)."""
+        df = pd.DataFrame({
+            'search_group': ['group-A', 'group-B', 'group-C'],
+            'id': [1, 2, 3]
+        })
+
+        with pytest.raises(ValueError, match="following groups are not remapped"):
+            analysis_helpers.remap_device_groups(df, new_group_mapping={
+                'new-group': 'group-A'
+                # group-B and group-C are not mapped
+            })
+
+    def test_remap_device_groups_allow_unspecified_true(self):
+        """Test that allow_unspecified=True passes through unmapped groups unchanged."""
+        df = pd.DataFrame({
+            'search_group': ['group-A', 'group-B', 'group-C', 'group-C'],
+            'id': [1, 2, 3, 4]
+        })
+
+        result = analysis_helpers.remap_device_groups(
+            df,
+            new_group_mapping={'new-A': 'group-A'},
+            allow_unspecified=True
+        )
+
+        # All rows preserved, unmapped groups keep original names
+        assert len(result) == 4
+        assert result['search_group'].tolist() == ['new-A', 'group-B', 'group-C', 'group-C']
+        assert result['id'].tolist() == [1, 2, 3, 4]
+
+    def test_remap_device_groups_new_group_column(self):
+        """Test that new_group_column creates a new column instead of overwriting."""
+        df = pd.DataFrame({
+            'search_group': ['group-A', 'group-B'],
+            'id': [1, 2]
+        })
+
+        result = analysis_helpers.remap_device_groups(
+            df,
+            new_group_mapping={
+                'new-A': 'group-A',
+                'new-B': 'group-B'
+            },
+            new_group_column='remapped_group'
+        )
+
+        # Original column preserved
+        assert result['search_group'].tolist() == ['group-A', 'group-B']
+        # New column has remapped values
+        assert result['remapped_group'].tolist() == ['new-A', 'new-B']
+
+    def test_remap_device_groups_custom_group_var(self):
+        """Test remapping with custom group_var column name."""
+        df = pd.DataFrame({
+            'custom_group': ['A', 'B', 'B'],
+            'id': [1, 2, 3]
+        })
+
+        result = analysis_helpers.remap_device_groups(
+            df,
+            new_group_mapping={'combined': ['A', 'B']},
+            group_var='custom_group'
+        )
+
+        assert result['custom_group'].tolist() == ['combined', 'combined', 'combined']
+
+    def test_remap_device_groups_preserves_other_columns(self):
+        """Test that other columns are preserved during remapping."""
+        df = pd.DataFrame({
+            'search_group': ['A', 'B'],
+            'id': [1, 2],
+            'value': ['x', 'y'],
+            'count': [10, 20]
+        })
+
+        result = analysis_helpers.remap_device_groups(df, new_group_mapping={
+            'new-A': 'A',
+            'new-B': 'B'
+        })
+
+        assert 'id' in result.columns
+        assert 'value' in result.columns
+        assert 'count' in result.columns
+        assert result['value'].tolist() == ['x', 'y']
+        assert result['count'].tolist() == [10, 20]
+
+
     def test_hierarchical_brand_standardization_all_levels(self):
         """Test hierarchical standardization with all three levels."""
         df = pd.DataFrame({
@@ -445,6 +705,255 @@ class TestAnalysisHelpers:
         assert 'Brand A' in comparison['summary']
         assert 'Brand B' in comparison['summary']
 
+    def test_count_unique_outcomes_preserves_search_group(self):
+        """Verify search_group column is preserved in output."""
+        df = pd.DataFrame({
+            'MDR_REPORT_KEY': [1, 1, 2, 2],
+            'SEQUENCE_NUMBER_OUTCOME': ['D', 'H', 'IN', 'L'],
+            'search_group': ['pump_a', 'pump_a', 'pump_b', 'pump_b']
+        })
+        result = analysis_helpers.count_unique_outcomes_per_report(df)
+
+        assert 'search_group' in result.columns, "search_group column should be preserved"
+        assert len(result) == 2  # One row per MDR_REPORT_KEY
+        assert result[result['MDR_REPORT_KEY'] == 1]['search_group'].iloc[0] == 'pump_a'
+        assert result[result['MDR_REPORT_KEY'] == 2]['search_group'].iloc[0] == 'pump_b'
+
+    def test_count_unique_outcomes_preserves_multiple_columns(self):
+        """Verify multiple consistent columns are preserved."""
+        df = pd.DataFrame({
+            'MDR_REPORT_KEY': [1, 1, 2],
+            'SEQUENCE_NUMBER_OUTCOME': ['D', 'H', 'IN'],
+            'search_group': ['pump_a', 'pump_a', 'pump_b'],
+            'BRAND_NAME': ['Brand X', 'Brand X', 'Brand Y'],
+            'EVENT_TYPE': ['Death', 'Death', 'Injury']
+        })
+        result = analysis_helpers.count_unique_outcomes_per_report(df)
+
+        # All consistent columns should be preserved
+        assert 'search_group' in result.columns
+        assert 'BRAND_NAME' in result.columns
+        assert 'EVENT_TYPE' in result.columns
+
+    # ==================== exclude_results tests ====================
+
+    def test_exclude_results_basic(self):
+        """Test basic exclusion functionality."""
+        main_df = pd.DataFrame({
+            'MDR_REPORT_KEY': [1, 2, 3, 4, 5],
+            'BRAND_NAME': ['A', 'B', 'C', 'D', 'E']
+        })
+        exclude_df = pd.DataFrame({
+            'MDR_REPORT_KEY': [2, 4],
+            'BRAND_NAME': ['B', 'D']
+        })
+
+        result = analysis_helpers.exclude_results(main_df, exclude_df)
+
+        assert len(result) == 3
+        assert list(result['MDR_REPORT_KEY']) == [1, 3, 5]
+
+    def test_exclude_results_custom_key(self):
+        """Test exclusion with custom key column."""
+        main_df = pd.DataFrame({
+            'EVENT_KEY': ['e1', 'e2', 'e3'],
+            'DATA': ['x', 'y', 'z']
+        })
+        exclude_df = pd.DataFrame({
+            'EVENT_KEY': ['e2'],
+            'DATA': ['y']
+        })
+
+        result = analysis_helpers.exclude_results(main_df, exclude_df, key='EVENT_KEY')
+
+        assert len(result) == 2
+        assert list(result['EVENT_KEY']) == ['e1', 'e3']
+
+    def test_exclude_results_empty_exclude(self):
+        """Test with empty exclude DataFrame."""
+        main_df = pd.DataFrame({
+            'MDR_REPORT_KEY': [1, 2, 3],
+            'DATA': ['a', 'b', 'c']
+        })
+        exclude_df = pd.DataFrame({'MDR_REPORT_KEY': []})
+
+        result = analysis_helpers.exclude_results(main_df, exclude_df)
+
+        assert len(result) == 3
+
+    def test_exclude_results_missing_key_main_raises(self):
+        """Test that missing key in main_df raises ValueError."""
+        main_df = pd.DataFrame({'OTHER_COL': [1, 2, 3]})
+        exclude_df = pd.DataFrame({'MDR_REPORT_KEY': [1]})
+
+        with pytest.raises(ValueError, match="main_df must contain"):
+            analysis_helpers.exclude_results(main_df, exclude_df)
+
+    def test_exclude_results_missing_key_exclude_raises(self):
+        """Test that missing key in exclude_df raises ValueError."""
+        main_df = pd.DataFrame({'MDR_REPORT_KEY': [1, 2, 3]})
+        exclude_df = pd.DataFrame({'OTHER_COL': [1]})
+
+        with pytest.raises(ValueError, match="exclude_df must contain"):
+            analysis_helpers.exclude_results(main_df, exclude_df)
+
+    # ==================== filter_by_text tests ====================
+
+    def test_filter_by_text_exclude_terms(self):
+        """Test filtering with exclude_terms."""
+        df = pd.DataFrame({
+            'DEVICE_NAME_CONCAT': [
+                'INSULIN PUMP MODEL A',
+                'THROMBECTOMY CATHETER',
+                'INSULIN DELIVERY SYSTEM',
+                'ANGIOJET DEVICE'
+            ],
+            'MDR_REPORT_KEY': [1, 2, 3, 4]
+        })
+
+        result = analysis_helpers.filter_by_text(df, exclude_terms=['insulin'])
+
+        assert len(result) == 2
+        assert list(result['MDR_REPORT_KEY']) == [2, 4]
+
+    def test_filter_by_text_include_terms(self):
+        """Test filtering with include_terms."""
+        df = pd.DataFrame({
+            'DEVICE_NAME_CONCAT': [
+                'INSULIN PUMP',
+                'THROMBECTOMY CATHETER',
+                'CATHETER SYSTEM',
+                'ANGIOJET'
+            ],
+            'MDR_REPORT_KEY': [1, 2, 3, 4]
+        })
+
+        result = analysis_helpers.filter_by_text(df, include_terms=['catheter'])
+
+        assert len(result) == 2
+        assert list(result['MDR_REPORT_KEY']) == [2, 3]
+
+    def test_filter_by_text_both_exclude_and_include(self):
+        """Test filtering with both exclude and include terms."""
+        df = pd.DataFrame({
+            'DEVICE_NAME_CONCAT': [
+                'CATHETER A',
+                'CATHETER B INSULIN',
+                'PUMP',
+                'CATHETER C'
+            ],
+            'MDR_REPORT_KEY': [1, 2, 3, 4]
+        })
+
+        result = analysis_helpers.filter_by_text(
+            df,
+            exclude_terms=['insulin'],
+            include_terms=['catheter']
+        )
+
+        assert len(result) == 2
+        assert list(result['MDR_REPORT_KEY']) == [1, 4]
+
+    def test_filter_by_text_custom_column(self):
+        """Test filtering with custom column."""
+        df = pd.DataFrame({
+            'BRAND_NAME': ['Omni Pump', 'Angiojet', 'Omni Cleaner'],
+            'MDR_REPORT_KEY': [1, 2, 3]
+        })
+
+        result = analysis_helpers.filter_by_text(
+            df,
+            include_terms=['omni'],
+            column='BRAND_NAME'
+        )
+
+        assert len(result) == 2
+        assert list(result['MDR_REPORT_KEY']) == [1, 3]
+
+    def test_filter_by_text_missing_column_raises(self):
+        """Test that missing column raises ValueError."""
+        df = pd.DataFrame({'OTHER_COL': ['a', 'b', 'c']})
+
+        with pytest.raises(ValueError, match="must contain"):
+            analysis_helpers.filter_by_text(df, exclude_terms=['test'])
+
+    def test_filter_by_text_case_insensitive(self):
+        """Test that filtering is case insensitive."""
+        df = pd.DataFrame({
+            'DEVICE_NAME_CONCAT': ['INSULIN', 'insulin', 'Insulin'],
+            'MDR_REPORT_KEY': [1, 2, 3]
+        })
+
+        result = analysis_helpers.filter_by_text(df, exclude_terms=['INSULIN'])
+
+        assert len(result) == 0
+
+    # ==================== summarize_devices tests ====================
+
+    def test_summarize_devices_basic(self):
+        """Test basic device summarization."""
+        df = pd.DataFrame({
+            'BRAND_NAME': ['Brand A', 'Brand A', 'Brand B'],
+            'GENERIC_NAME': ['Generic 1', 'Generic 1', 'Generic 2'],
+            'MANUFACTURER_D_NAME': ['Mfr X', 'Mfr X', 'Mfr Y'],
+            'MDR_REPORT_KEY': [1, 2, 3]
+        })
+
+        result = analysis_helpers.summarize_devices(df)
+
+        assert len(result) == 2  # Two unique device combinations
+        assert 'BRAND_NAME' in result.columns
+        assert 'GENERIC_NAME' in result.columns
+        assert 'MANUFACTURER_D_NAME' in result.columns
+
+    def test_summarize_devices_custom_columns(self):
+        """Test summarization with custom columns."""
+        df = pd.DataFrame({
+            'BRAND_NAME': ['A', 'A', 'B'],
+            'GENERIC_NAME': ['G1', 'G1', 'G2'],
+            'MDR_REPORT_KEY': [1, 2, 3]
+        })
+
+        result = analysis_helpers.summarize_devices(df, columns=['BRAND_NAME'])
+
+        assert len(result) == 2
+        assert list(result.columns) == ['BRAND_NAME']
+
+    def test_summarize_devices_missing_optional_columns(self):
+        """Test that missing optional columns are gracefully handled."""
+        df = pd.DataFrame({
+            'BRAND_NAME': ['A', 'B', 'A'],
+            'MDR_REPORT_KEY': [1, 2, 3]
+        })
+
+        # Default columns include MANUFACTURER_D_NAME which is missing
+        result = analysis_helpers.summarize_devices(df)
+
+        assert len(result) == 2
+        assert 'BRAND_NAME' in result.columns
+        assert 'MANUFACTURER_D_NAME' not in result.columns
+
+    def test_summarize_devices_no_valid_columns_raises(self):
+        """Test that no valid columns raises ValueError."""
+        df = pd.DataFrame({
+            'OTHER_COL': ['a', 'b', 'c']
+        })
+
+        with pytest.raises(ValueError, match="None of the specified columns"):
+            analysis_helpers.summarize_devices(df)
+
+    def test_summarize_devices_sorted_output(self):
+        """Test that output is sorted by first column."""
+        df = pd.DataFrame({
+            'BRAND_NAME': ['Zebra', 'Apple', 'Middle'],
+            'GENERIC_NAME': ['G1', 'G2', 'G3']
+        })
+
+        result = analysis_helpers.summarize_devices(df)
+
+        assert result['BRAND_NAME'].iloc[0] == 'Apple'
+        assert result['BRAND_NAME'].iloc[2] == 'Zebra'
+
 
 @pytest.mark.integration
 class TestAnalysisHelpersIntegration:
@@ -569,6 +1078,89 @@ class TestAnalysisHelpersIntegration:
         assert 'device_family' in result.columns
         assert 'manufacturer' in result.columns
         assert len(result) == len(results)  # Should preserve all rows
+
+    def test_enrich_with_patient_data_handles_many_keys(self, db_with_data):
+        """Verify enrichment works with key count that could exceed SQLite limit."""
+        # Create patient table with 25 records (enough to test batching with small batch size)
+        patient_data = pd.DataFrame({
+            'MDR_REPORT_KEY': list(range(1, 26)),
+            'SEQUENCE_NUMBER_OUTCOME': ['D'] * 10 + ['IN'] * 10 + ['H'] * 5
+        })
+        patient_data.to_sql('patient', db_with_data.conn, if_exists='replace', index=False)
+
+        # Create input DataFrame with 25 keys
+        results_df = pd.DataFrame({'MDR_REPORT_KEY': list(range(1, 26))})
+
+        # This should work without hitting SQLite limit (uses batching internally)
+        enriched = analysis_helpers.enrich_with_patient_data(db_with_data, results_df)
+
+        assert len(enriched) == 25
+        assert 'SEQUENCE_NUMBER_OUTCOME' in enriched.columns
+
+    def test_enrich_with_patient_data_empty_input(self, db_with_data):
+        """Verify enrichment handles empty DataFrame gracefully."""
+        patient_data = pd.DataFrame({
+            'MDR_REPORT_KEY': [1, 2],
+            'SEQUENCE_NUMBER_OUTCOME': ['D', 'IN']
+        })
+        patient_data.to_sql('patient', db_with_data.conn, if_exists='replace', index=False)
+
+        results_df = pd.DataFrame({'MDR_REPORT_KEY': pd.Series([], dtype=int)})
+        enriched = analysis_helpers.enrich_with_patient_data(db_with_data, results_df)
+
+        assert len(enriched) == 0
+
+    def test_enrich_with_narratives_handles_many_keys(self, db_with_data):
+        """Verify narrative enrichment works with many keys."""
+        # Create text table with 25 records
+        text_data = pd.DataFrame({
+            'MDR_REPORT_KEY': list(range(1, 26)),
+            'FOI_TEXT': [f'Narrative text {i}' for i in range(1, 26)]
+        })
+        text_data.to_sql('text', db_with_data.conn, if_exists='replace', index=False)
+
+        # Create input DataFrame with 25 keys
+        results_df = pd.DataFrame({'MDR_REPORT_KEY': list(range(1, 26))})
+
+        # This should work without hitting SQLite limit
+        enriched = analysis_helpers.enrich_with_narratives(db_with_data, results_df)
+
+        assert len(enriched) == 25
+        assert 'FOI_TEXT' in enriched.columns
+
+    def test_enrich_with_problems_handles_many_keys(self, db_with_data):
+        """Verify problems enrichment works with many keys."""
+        # Create problems table with 25 records
+        problems_data = pd.DataFrame({
+            'MDR_REPORT_KEY': list(range(1, 26)),
+            'DEVICE_SEQUENCE_NUMBER': [1] * 25,
+            'DEVICE_PROBLEM_CODE': ['1234'] * 25
+        })
+        problems_data.to_sql('problems', db_with_data.conn, if_exists='replace', index=False)
+
+        # Create input DataFrame with 25 keys
+        results_df = pd.DataFrame({'MDR_REPORT_KEY': list(range(1, 26))})
+
+        # This should work without hitting SQLite limit
+        enriched = analysis_helpers.enrich_with_problems(db_with_data, results_df)
+
+        assert len(enriched) == 25
+        assert 'DEVICE_PROBLEM_CODE' in enriched.columns
+
+    def test_get_narratives_handles_many_keys(self, db_with_data):
+        """Verify get_narratives works with many keys."""
+        # Create text table with 25 records
+        text_data = pd.DataFrame({
+            'MDR_REPORT_KEY': list(range(1, 26)),
+            'FOI_TEXT': [f'Narrative text {i}' for i in range(1, 26)]
+        })
+        text_data.to_sql('text', db_with_data.conn, if_exists='replace', index=False)
+
+        # This should work without hitting SQLite limit
+        narratives = db_with_data.get_narratives(list(range(1, 26)))
+
+        assert len(narratives) == 25
+        assert 'FOI_TEXT' in narratives.columns
 
 
 if __name__ == '__main__':

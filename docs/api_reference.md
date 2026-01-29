@@ -1848,6 +1848,220 @@ for name, paths in figures.items():
 
 ---
 
+### Search Refinement & Group Management
+
+These methods help refine search terms and manage device group assignments.
+
+---
+
+#### `exclude_results(main_df, exclude_df, key='MDR_REPORT_KEY')`
+
+Return rows from main_df whose key values don't appear in exclude_df.
+
+Useful for search term refinement: find what matches a broad search but not a narrow search, to identify potentially missed results.
+
+**Parameters**:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `main_df` | DataFrame | required | DataFrame to filter |
+| `exclude_df` | DataFrame | required | DataFrame containing rows to exclude |
+| `key` | str | `'MDR_REPORT_KEY'` | Column to match on |
+
+**Returns**: DataFrame with excluded rows removed
+
+**Raises**:
+- `ValueError`: If key column is missing from either DataFrame
+
+**Examples**:
+
+```python
+from pymaude import analysis_helpers
+
+# Find what's in broad search but not narrow search
+broad = db.search_by_device_names('omni')
+narrow = db.search_by_device_names([['angiojet', 'omni'], ['boston sci', 'omni']])
+missed = analysis_helpers.exclude_results(broad, narrow)
+
+# Review what's being missed
+print(f"Missed {len(missed)} reports")
+
+# Use EVENT_KEY instead of MDR_REPORT_KEY
+missed_events = analysis_helpers.exclude_results(broad, narrow, key='EVENT_KEY')
+```
+
+**Notes**:
+- Use `MDR_REPORT_KEY` to check individual report overlap
+- Use `EVENT_KEY` to check event-level overlap (accounts for duplicate reports)
+
+**Related**: `filter_by_text()`, `summarize_devices()`
+
+---
+
+#### `filter_by_text(df, exclude_terms=None, include_terms=None, column='DEVICE_NAME_CONCAT')`
+
+Filter results by text matching on a specified column.
+
+Useful for removing obvious noise (e.g., insulin pumps) from search results or keeping only rows matching certain terms.
+
+**Parameters**:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `df` | DataFrame | required | DataFrame to filter |
+| `exclude_terms` | list | `None` | Terms to exclude - removes rows matching ANY |
+| `include_terms` | list | `None` | Terms to include - keeps only rows matching ANY |
+| `column` | str | `'DEVICE_NAME_CONCAT'` | Column to search |
+
+**Returns**: DataFrame with filtered rows
+
+**Raises**:
+- `ValueError`: If column is missing from DataFrame
+
+**Examples**:
+
+```python
+from pymaude import analysis_helpers
+
+# Remove insulin-related results from search
+missed = analysis_helpers.exclude_results(broad_search, narrow_search)
+cleaned = analysis_helpers.filter_by_text(missed, exclude_terms=['insulin', 'pump'])
+
+# Keep only catheter-related results
+catheters = analysis_helpers.filter_by_text(results, include_terms=['catheter', 'cath'])
+
+# Combine both: keep catheters, exclude insulin
+filtered = analysis_helpers.filter_by_text(
+    results,
+    exclude_terms=['insulin'],
+    include_terms=['catheter']
+)
+
+# Filter on a different column
+filtered = analysis_helpers.filter_by_text(
+    results,
+    exclude_terms=['medtronic'],
+    column='MANUFACTURER_D_NAME'
+)
+```
+
+**Notes**:
+- Case-insensitive matching
+- Terms are matched as substrings (partial matches work)
+- When both exclude and include are provided, exclude is applied first
+
+**Related**: `exclude_results()`, `summarize_devices()`
+
+---
+
+#### `summarize_devices(df, columns=None)`
+
+Quick view of unique devices in results for search refinement.
+
+Shows distinct combinations of device identifiers to help review what devices are captured by a search.
+
+**Parameters**:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `df` | DataFrame | required | DataFrame with device information |
+| `columns` | list | `['BRAND_NAME', 'GENERIC_NAME', 'MANUFACTURER_D_NAME']` | Columns to include |
+
+**Returns**: DataFrame with unique device combinations, sorted by first column
+
+**Raises**:
+- `ValueError`: If none of the specified columns exist in DataFrame
+
+**Examples**:
+
+```python
+from pymaude import analysis_helpers
+
+# See what devices are being missed by narrow search
+missed = analysis_helpers.exclude_results(broad_search, narrow_search)
+analysis_helpers.summarize_devices(missed)
+
+# Summarize with only brand names
+analysis_helpers.summarize_devices(results, columns=['BRAND_NAME'])
+
+# Full workflow: refine search terms
+broad = db.search_by_device_names('omni')
+narrow = db.search_by_device_names([['angiojet', 'omni'], ['boston sci', 'omni']])
+
+missed = analysis_helpers.exclude_results(broad, narrow)
+missed = analysis_helpers.filter_by_text(missed, exclude_terms=['insulin', 'pump'])
+analysis_helpers.summarize_devices(missed)  # Review what's left
+```
+
+**Notes**:
+- Only includes columns that exist in the DataFrame
+- Results are sorted alphabetically by first column
+- Useful for iterating on search criteria
+
+**Related**: `exclude_results()`, `filter_by_text()`
+
+---
+
+#### `remap_device_groups(results_df, new_group_mapping, group_var='search_group', new_group_column=None, allow_unspecified=False)`
+
+Remap group assignments within a DataFrame of device events.
+
+Useful for combining fine-grained search groups into broader categories or renaming groups for analysis.
+
+**Parameters**:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `results_df` | DataFrame | required | DataFrame with group column |
+| `new_group_mapping` | dict | required | Mapping of new group names to old group names |
+| `group_var` | str | `'search_group'` | Column containing current group assignments |
+| `new_group_column` | str | `None` | New column for remapped groups (overwrites if None) |
+| `allow_unspecified` | bool | `False` | If True, unmapped groups pass through unchanged |
+
+**Returns**: DataFrame with remapped group assignments
+
+**Raises**:
+- `ValueError`: If `group_var` column is missing
+- `ValueError`: If an old group is assigned to multiple new groups
+- `ValueError`: If `allow_unspecified=False` and groups are unmapped
+
+**Examples**:
+
+```python
+from pymaude import analysis_helpers
+
+# Combine device models into broader categories
+results = db.search_by_device_names({
+    'cleaner_15': [['argon', 'cleaner', '15']],
+    'cleaner_xt': [['argon', 'cleaner', 'xt']],
+    'cleaner_other': [['argon', 'cleaner']],
+    'angiojet': ['angiojet']
+})
+
+# Remap: combine all cleaner models, keep angiojet separate
+remapped = analysis_helpers.remap_device_groups(results, {
+    'Argon Cleaner': ['cleaner_15', 'cleaner_xt', 'cleaner_other'],
+    'AngioJet': 'angiojet'
+})
+
+# Remap to new column (preserve original groups)
+remapped = analysis_helpers.remap_device_groups(
+    results,
+    {'Mechanical': ['cleaner_15', 'angiojet']},
+    new_group_column='device_category',
+    allow_unspecified=True
+)
+```
+
+**Notes**:
+- Dict values can be a single string or list of strings
+- Order of `new_group_mapping` determines final group order
+- Use `allow_unspecified=True` when only remapping some groups
+
+**Related**: `search_by_device_names()`, `summarize_by_group()`
+
+---
+
 ### Export & Utilities
 
 #### `export_subset(output_file, **filters)`

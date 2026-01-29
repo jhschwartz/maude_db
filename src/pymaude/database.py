@@ -237,7 +237,7 @@ class MaudeDatabase:
         return cursor.fetchone()[0]
 
 
-    def add_years(self, years, tables=None, download=False, strict=False, chunk_size=100000, data_dir='./maude_data', interactive=True, force_refresh=False, force_download=False):
+    def add_years(self, years, tables=None, download=False, strict=False, chunk_size=100000, data_dir='./maude_data', interactive=True, force_refresh=False, force_download=False, index_names=False):
         """
         Add MAUDE data for specified years to database.
 
@@ -267,6 +267,11 @@ class MaudeDatabase:
                            Controls download caching - bypasses local zip cache to get fresh
                            copies from FDA. Use when FDA has updated their files. Only has
                            effect when download=True.
+            index_names: If True, create a column on the device table which concatenates multiple
+                            device name types (columns: DEVICE_NAME, GENERIC_NAME, 
+                            MANUFACTURER_D_NAME) then create an SQL index on the column. This is a
+                            prerequisite for using the search_by_device_names() method, although 
+                            note the index can be created later with db.create_search_index()
 
         Note:
             force_download and force_refresh are independent:
@@ -461,6 +466,13 @@ class MaudeDatabase:
 
         if self.verbose:
             print('\nDatabase update complete')
+
+        if index_names:
+            if self.verbose:
+                print('\nWriting search index for combined device names...')
+            self.create_search_index()
+            if self.verbose:
+                print('\nSearch index complete!')
 
 
     def _predict_file_path(self, table, year, data_dir='./maude_data'):
@@ -1382,15 +1394,25 @@ class MaudeDatabase:
         Returns:
             DataFrame with mdr_report_key and narrative text
         """
-        placeholders = ','.join('?' * len(mdr_report_keys))
+        if not mdr_report_keys:
+            return pd.DataFrame(columns=['MDR_REPORT_KEY', 'FOI_TEXT'])
 
-        sql = f"""
-            SELECT MDR_REPORT_KEY, FOI_TEXT
-            FROM text
-            WHERE MDR_REPORT_KEY IN ({placeholders})
-        """
+        # Batch queries to avoid SQLite variable limit (typically 999)
+        batch_size = 900
+        result_dfs = []
 
-        return pd.read_sql_query(sql, self.conn, params=mdr_report_keys)
+        for i in range(0, len(mdr_report_keys), batch_size):
+            batch_keys = mdr_report_keys[i:i + batch_size]
+            placeholders = ','.join('?' * len(batch_keys))
+            sql = f"""
+                SELECT MDR_REPORT_KEY, FOI_TEXT
+                FROM text
+                WHERE MDR_REPORT_KEY IN ({placeholders})
+            """
+            batch_df = pd.read_sql_query(sql, self.conn, params=batch_keys)
+            result_dfs.append(batch_df)
+
+        return pd.concat(result_dfs, ignore_index=True) if result_dfs else pd.DataFrame(columns=['MDR_REPORT_KEY', 'FOI_TEXT'])
 
 
     def export_subset(self, output_file, **filters):
@@ -1821,6 +1843,16 @@ class MaudeDatabase:
         if deduplicate_events and not has_event_key:
             deduplicate_events = False
 
+        # Check if DEVICE_NAME_CONCAT exists for SELECT clause
+        cursor = self.conn.execute("PRAGMA table_info(device)")
+        device_columns = {row[1] for row in cursor.fetchall()}
+        has_concat_column = 'DEVICE_NAME_CONCAT' in device_columns
+
+        # Build device columns for SELECT
+        device_select_cols = "d.BRAND_NAME, d.GENERIC_NAME, d.MANUFACTURER_D_NAME, d.DEVICE_REPORT_PRODUCT_CODE"
+        if has_concat_column:
+            device_select_cols += ", d.DEVICE_NAME_CONCAT"
+
         if deduplicate_events:
             # CTE-based deduplication by EVENT_KEY (same as query_device)
             sql = f"""
@@ -1844,8 +1876,7 @@ class MaudeDatabase:
                     GROUP BY COALESCE(EVENT_KEY, MDR_REPORT_KEY)
                 )
                 SELECT m.MDR_REPORT_KEY, m.EVENT_KEY, m.DATE_RECEIVED, m.EVENT_TYPE,
-                       d.BRAND_NAME, d.GENERIC_NAME, d.MANUFACTURER_D_NAME,
-                       d.DEVICE_REPORT_PRODUCT_CODE, d.ROWID as device_rowid
+                       {device_select_cols}, d.ROWID as device_rowid
                 FROM first_report_per_event frpe
                 JOIN master m ON m.ROWID = frpe.first_master_rowid
                 JOIN device d ON d.ROWID = frpe.first_device_rowid
@@ -1859,8 +1890,7 @@ class MaudeDatabase:
                     WHERE ({device_where})
                 )
                 SELECT m.MDR_REPORT_KEY, m.EVENT_KEY, m.DATE_RECEIVED, m.EVENT_TYPE,
-                       d.BRAND_NAME, d.GENERIC_NAME, d.MANUFACTURER_D_NAME,
-                       d.DEVICE_REPORT_PRODUCT_CODE, md.device_rowid
+                       {device_select_cols}, md.device_rowid
                 FROM master m
                 JOIN matching_devices md ON md.MDR_REPORT_KEY = m.MDR_REPORT_KEY
                 JOIN device d ON d.ROWID = md.device_rowid

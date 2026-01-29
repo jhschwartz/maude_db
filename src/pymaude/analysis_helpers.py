@@ -11,6 +11,42 @@ from typing import Dict, List, Optional, Union
 import os
 
 
+# ==================== Internal Helper Functions ====================
+
+def _batched_query_by_keys(db, table, columns, mdr_keys, batch_size=900):
+    """
+    Execute batched SQL queries to avoid SQLite variable limit.
+
+    SQLite has a limit on the number of variables in a query (typically 999).
+    This function splits large key lists into batches and concatenates results.
+
+    Args:
+        db: MaudeDatabase instance
+        table: Table name to query
+        columns: Column specification (e.g., '*' or 'MDR_REPORT_KEY, FOI_TEXT')
+        mdr_keys: List of MDR_REPORT_KEY values to query
+        batch_size: Maximum keys per batch (default 900, under SQLite's 999 limit)
+
+    Returns:
+        DataFrame with query results from all batches concatenated
+    """
+    if not mdr_keys:
+        return pd.DataFrame()
+
+    result_dfs = []
+    for i in range(0, len(mdr_keys), batch_size):
+        batch_keys = mdr_keys[i:i + batch_size]
+        placeholders = ','.join(['?'] * len(batch_keys))
+        batch_df = pd.read_sql_query(f"""
+            SELECT {columns}
+            FROM {table}
+            WHERE MDR_REPORT_KEY IN ({placeholders})
+        """, db.conn, params=batch_keys)
+        result_dfs.append(batch_df)
+
+    return pd.concat(result_dfs, ignore_index=True) if result_dfs else pd.DataFrame()
+
+
 # ==================== Existing Helper Methods (Moved from database.py) ====================
 
 def get_narratives_for(db, results_df):
@@ -277,12 +313,12 @@ def enrich_with_problems(db, results_df):
     if not mdr_keys:
         return results_df
 
-    placeholders = ','.join(['?'] * len(mdr_keys))
-    problems = pd.read_sql_query(f"""
-        SELECT MDR_REPORT_KEY, DEVICE_SEQUENCE_NUMBER, DEVICE_PROBLEM_CODE
-        FROM problems
-        WHERE MDR_REPORT_KEY IN ({placeholders})
-    """, db.conn, params=mdr_keys)
+    # Use batched query to avoid SQLite variable limit
+    problems = _batched_query_by_keys(
+        db, 'problems',
+        'MDR_REPORT_KEY, DEVICE_SEQUENCE_NUMBER, DEVICE_PROBLEM_CODE',
+        mdr_keys
+    )
 
     if db.verbose:
         print(f"Joined {len(problems)} device problem entries")
@@ -338,12 +374,8 @@ def enrich_with_patient_data(db, results_df):
     if not mdr_keys:
         return results_df
 
-    placeholders = ','.join(['?'] * len(mdr_keys))
-    patient = pd.read_sql_query(f"""
-        SELECT *
-        FROM patient
-        WHERE MDR_REPORT_KEY IN ({placeholders})
-    """, db.conn, params=mdr_keys)
+    # Use batched query to avoid SQLite variable limit
+    patient = _batched_query_by_keys(db, 'patient', '*', mdr_keys)
 
     if db.verbose:
         print(f"Joined {len(patient)} patient records")
@@ -354,7 +386,8 @@ def enrich_with_patient_data(db, results_df):
             return []
         return [code.strip() for code in str(outcome_str).split(';') if code.strip()]
 
-    patient['outcome_codes'] = patient['SEQUENCE_NUMBER_OUTCOME'].apply(parse_outcomes)
+    if len(patient) > 0 and 'SEQUENCE_NUMBER_OUTCOME' in patient.columns:
+        patient['outcome_codes'] = patient['SEQUENCE_NUMBER_OUTCOME'].apply(parse_outcomes)
 
     # Left join to preserve all original rows
     enriched = results_df.merge(
@@ -410,12 +443,8 @@ def enrich_with_narratives(db, results_df):
     if not mdr_keys:
         return results_df
 
-    placeholders = ','.join(['?'] * len(mdr_keys))
-    text = pd.read_sql_query(f"""
-        SELECT MDR_REPORT_KEY, FOI_TEXT
-        FROM text
-        WHERE MDR_REPORT_KEY IN ({placeholders})
-    """, db.conn, params=mdr_keys)
+    # Use batched query to avoid SQLite variable limit
+    text = _batched_query_by_keys(db, 'text', 'MDR_REPORT_KEY, FOI_TEXT', mdr_keys)
 
     if db.verbose:
         print(f"Joined {len(text)} narrative texts")
@@ -490,6 +519,290 @@ def summarize_by_brand(results_df, group_column='search_group', include_temporal
         ).size().unstack(fill_value=0)
 
     return summary
+
+
+def _combine_device_names_search_groups(results_df, group_names, group_var='search_group', preserve_groups=True):
+    """
+    Combine dataframes of individual search group reuslts.
+    
+    E.g., maybe you want to combine the following groups:
+        - "cleaner_15", corresponding to the device model "Argon Medical Cleaner 15"
+        - "cleaner_xt", corresponding to the device model "Argon Medical Cleaner XT"
+        - "cleaner_unspecified", corresponding to results of either device, but which 
+          did not meet search criteria for specifically models 15 or XT
+    If your results were in the var `results`, you would call this function as:
+        cleaner_all = combine_device_names_search_groups(
+            results, 
+            ['cleaner_15', 'cleaner_xt', 'cleaner_unspecified']
+        )
+    The returned dataframe would be only the events corresponding to the 3 prior groups.
+    
+
+    Args:
+        results_df: DataFrame of device events with a column defining prior group assignment
+        group_names: List[str] listing names of groups 
+        group_var: str, the column name that defines groups in results_df
+        preserve_groups: bool, whether the prior group column should be kept in the results
+    Returns: 
+        DataFrame of device events of the new group only
+
+    
+    Example: 
+        >> results
+            search_group    MDR_REPORT_KEY    ...
+        0   group-A         abcdefg-1
+        1   group-B         abcdefg-2 
+        2   group-B         abcdefg-3
+        3   group-B         abcdefg-4
+        4   group-C         abcdefg-5
+        5   group-D         abcdefg-6
+        6   group-D         abcdefg-7
+        7   group-D         abcdefg-8
+        ...
+        >> results_2 = combine_device_names_search_groups(results, ['group-A', 'group-B', 'group-C'], preserve_groups=True)
+        >> results_2
+            search_group    MDR_REPORT_KEY    ...
+        0   group-A         abcdefg-1
+        1   group-B         abcdefg-2 
+        2   group-B         abcdefg-3
+        3   group-B         abcdefg-4
+        4   group-C         abcdefg-5
+        ...
+        >> results_3 = combine_device_names_search_groups(results, ['group-A', 'group-B', 'group-C'], preserve_groups=False)
+        >> results_3
+            MDR_REPORT_KEY    ...
+        0   abcdefg-1
+        1   abcdefg-2 
+        2   abcdefg-3
+        3   abcdefg-4
+        4   abcdefg-5
+        5   abcdefg-6
+        6   abcdefg-7
+        7   abcdefg-8
+    """
+    
+    desired_groups = []
+    for group in group_names:
+        df = results_df[results_df[group_var] == group]
+        desired_groups.append(df)
+    
+    new_df = pd.concat(desired_groups)
+
+    if not preserve_groups:
+        new_df = new_df.drop(columns=[group_var])
+    
+    return new_df
+
+
+def remap_device_groups(results_df, new_group_mapping, group_var='search_group', new_group_column=None, allow_unspecified=False):
+    """
+    Remaps the groupings within a DataFrame of device events.
+
+    Args:
+        results_df: DataFrame of device events with a column defining prior group assignment
+        new_group_mapping: dict, mapping of new group names to old group names. Keys are str which
+                            correspond to new group names. Values are each either list[str] (combine
+                            1 or more prior groups) or str (rename 1 prior group).
+        group_var: str, the name of the column in results_df which contains prior group assignments
+        new_group_column: str, the name of the column to use to put the new group names in the df. If
+                            None (default), then the group_var column will be overwritten with the new
+                            groups.
+        allow_unspecified: bool, whether we allow some prior groups to be left out of the new mapping.
+                            If False (default), a ValueError is raised if any prior groups are not
+                            remapped. If True, unmapped groups pass through unchanged (retaining their
+                            original group name in the target column).
+
+    Returns:
+        DataFrame of device events with the new groupings.
+
+    Raises:
+        ValueError: If group_var column is missing from results_df.
+        ValueError: If a prior group is assigned to more than one new group.
+        ValueError: If allow_unspecified is False and there are unmapped groups.
+
+    Example:
+        >> results
+            search_group    MDR_REPORT_KEY    ...
+        0   group-A         abcdefg-1
+        1   group-B         abcdefg-2
+        2   group-B         abcdefg-3
+        3   group-B         abcdefg-4
+        4   group-C         abcdefg-5
+        5   group-D         abcdefg-6
+        6   group-D         abcdefg-7
+        7   group-D         abcdefg-8
+        ...
+        >> results = remap_device_groups(results, new_group_mapping={
+            'group-I': 'group-A',
+            'group-II': ['group-B', 'group-C', 'group-D']
+        })
+        >> results
+            search_group    MDR_REPORT_KEY    ...
+        0   group-I         abcdefg-1
+        1   group-II        abcdefg-2
+        2   group-II        abcdefg-3
+        3   group-II        abcdefg-4
+        4   group-II        abcdefg-5
+        5   group-II        abcdefg-6
+        6   group-II        abcdefg-7
+        7   group-II        abcdefg-8
+        ...
+    """
+    if group_var not in results_df.columns:
+        raise ValueError(f"DataFrame must contain '{group_var}' column")
+
+    # Build reverse mapping (old_group -> new_group) and collect old group names
+    old_to_new = {}
+    for new_group, old_groups in new_group_mapping.items():
+        if isinstance(old_groups, str):
+            old_to_new[old_groups] = new_group
+        elif isinstance(old_groups, list):
+            for old_group in old_groups:
+                old_to_new[old_group] = new_group
+
+    old_group_names_specified = list(old_to_new.keys())
+
+    # Check for duplicate old group assignments (would have been overwritten in dict)
+    expected_count = sum(1 if isinstance(v, str) else len(v) for v in new_group_mapping.values())
+    if len(old_group_names_specified) < expected_count:
+        raise ValueError('Cannot remap device groups because a prior group is assigned to more than one new group.')
+
+    # Check for unmapped groups if allow_unspecified is False
+    existing_groups = set(results_df[group_var].unique())
+    unmapped_groups = existing_groups - set(old_group_names_specified)
+
+    if not allow_unspecified and unmapped_groups:
+        raise ValueError(
+            f'Cannot remap device groups because allow_unspecified is False and '
+            f'the following groups are not remapped: {unmapped_groups}'
+        )
+
+    # Apply the renaming
+    df = results_df.copy()
+    target_col = new_group_column if new_group_column else group_var
+    original_values = df[group_var].copy()  # Save before potential overwrite
+    df[target_col] = df[group_var].map(old_to_new)
+
+    # For unmapped groups (when allow_unspecified=True), preserve original group name
+    if allow_unspecified:
+        df[target_col] = df[target_col].fillna(original_values)
+
+    return df
+
+
+# ==================== Search Refinement Helpers ====================
+
+def exclude_results(main_df, exclude_df, key='MDR_REPORT_KEY'):
+    """
+    Return rows from main_df whose key values don't appear in exclude_df.
+
+    Useful for search term refinement: find what matches a broad search
+    but not a narrow search, to identify potentially missed results.
+
+    Args:
+        main_df: DataFrame to filter
+        exclude_df: DataFrame containing rows to exclude
+        key: Column to match on (default: 'MDR_REPORT_KEY')
+
+    Returns:
+        DataFrame with excluded rows removed
+
+    Raises:
+        ValueError: If key column is missing from either DataFrame
+
+    Example:
+        broad = db.search_by_device_names('omni')
+        narrow = db.search_by_device_names([['angiojet', 'omni'], ['boston sci', 'omni']])
+        missed = exclude_results(broad, narrow)  # What's in broad but not narrow
+    """
+    if key not in main_df.columns:
+        raise ValueError(f"main_df must contain '{key}' column")
+    if key not in exclude_df.columns:
+        raise ValueError(f"exclude_df must contain '{key}' column")
+
+    return main_df[~main_df[key].isin(exclude_df[key])]
+
+
+def filter_by_text(df, exclude_terms=None, include_terms=None, column='DEVICE_NAME_CONCAT'):
+    """
+    Filter results by text matching on a specified column.
+
+    Useful for removing obvious noise (e.g., insulin pumps) from search results
+    or keeping only rows matching certain terms.
+
+    Args:
+        df: DataFrame to filter
+        exclude_terms: List of terms - exclude rows matching ANY of these
+        include_terms: List of terms - keep only rows matching ANY of these
+        column: Column to search (default: 'DEVICE_NAME_CONCAT')
+
+    Returns:
+        DataFrame with filtered rows
+
+    Raises:
+        ValueError: If column is missing from DataFrame
+
+    Example:
+        # Remove insulin-related results
+        cleaned = filter_by_text(results, exclude_terms=['insulin', 'pump'])
+
+        # Keep only catheter-related results
+        catheters = filter_by_text(results, include_terms=['catheter', 'cath'])
+
+        # Combine both
+        filtered = filter_by_text(results,
+                                  exclude_terms=['insulin'],
+                                  include_terms=['thrombectomy'])
+    """
+    if column not in df.columns:
+        raise ValueError(f"DataFrame must contain '{column}' column")
+
+    result = df.copy()
+
+    if exclude_terms:
+        pattern = '|'.join(exclude_terms)
+        result = result[~result[column].str.contains(pattern, case=False, na=False)]
+
+    if include_terms:
+        pattern = '|'.join(include_terms)
+        result = result[result[column].str.contains(pattern, case=False, na=False)]
+
+    return result
+
+
+def summarize_devices(df, columns=None):
+    """
+    Quick view of unique devices in results for search refinement.
+
+    Shows distinct combinations of device identifiers to help review
+    what devices are captured by a search.
+
+    Args:
+        df: DataFrame with device information
+        columns: List of columns to include. Default: ['BRAND_NAME', 'GENERIC_NAME', 'MANUFACTURER_D_NAME']
+
+    Returns:
+        DataFrame with unique device combinations, sorted by first column
+
+    Example:
+        missed = exclude_results(broad_search, narrow_search)
+        summarize_devices(missed)  # See what devices are being missed
+    """
+    if columns is None:
+        columns = ['BRAND_NAME', 'GENERIC_NAME', 'MANUFACTURER_D_NAME']
+
+    # Only use columns that exist in the DataFrame
+    available_cols = [c for c in columns if c in df.columns]
+
+    if not available_cols:
+        raise ValueError(f"None of the specified columns found in DataFrame. Available: {list(df.columns)}")
+
+    result = df[available_cols].drop_duplicates()
+
+    if len(available_cols) > 0:
+        result = result.sort_values(available_cols[0], na_position='last')
+
+    return result.reset_index(drop=True)
 
 
 # ==================== Brand Standardization Helpers ====================
@@ -1406,6 +1719,8 @@ def count_unique_outcomes_per_report(patient_df, outcome_col='SEQUENCE_NUMBER_OU
         - patient_count: Number of patients in this report
         - unique_outcomes: List of unique outcome codes for this report
         - outcome_counts: Dict with count of each outcome code
+        - Plus any columns that are consistent within each MDR_REPORT_KEY group
+          (e.g., search_group, BRAND_NAME, EVENT_TYPE)
 
     Example:
         >>> patient_data = db.enrich_with_patient_data(results)
@@ -1429,6 +1744,21 @@ def count_unique_outcomes_per_report(patient_df, outcome_col='SEQUENCE_NUMBER_OU
             return set()
         return {code.strip() for code in str(outcome_str).split(';') if code.strip()}
 
+    # Identify columns to preserve (same value for all rows with same MDR_REPORT_KEY)
+    # Skip patient-specific columns and the outcome column
+    skip_prefixes = ('PATIENT', 'SEQUENCE', 'outcome')
+    preserve_cols = []
+    for col in patient_df.columns:
+        if col in ['MDR_REPORT_KEY', outcome_col, 'outcome_codes']:
+            continue
+        if any(col.upper().startswith(prefix.upper()) for prefix in skip_prefixes):
+            continue
+        # Check if column has single value per key (sample check for performance)
+        sample_keys = patient_df['MDR_REPORT_KEY'].unique()[:100]
+        sample_df = patient_df[patient_df['MDR_REPORT_KEY'].isin(sample_keys)]
+        if len(sample_df) > 0 and sample_df.groupby('MDR_REPORT_KEY')[col].nunique().max() == 1:
+            preserve_cols.append(col)
+
     # For each report, collect all outcomes from all patients and deduplicate
     report_outcomes = []
 
@@ -1440,11 +1770,17 @@ def count_unique_outcomes_per_report(patient_df, outcome_col='SEQUENCE_NUMBER_OU
         outcome_list = sorted(all_outcomes)
         outcome_counts_dict = {code: 1 for code in outcome_list}  # Each outcome counted once per report
 
-        report_outcomes.append({
+        row_data = {
             'MDR_REPORT_KEY': mdr_key,
             'patient_count': len(group),
             'unique_outcomes': outcome_list,
             'outcome_counts': outcome_counts_dict
-        })
+        }
+
+        # Preserve additional columns
+        for col in preserve_cols:
+            row_data[col] = group[col].iloc[0]
+
+        report_outcomes.append(row_data)
 
     return pd.DataFrame(report_outcomes)
