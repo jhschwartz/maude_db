@@ -1681,6 +1681,7 @@ class MaudeDatabase:
                        Strings are treated as single-term OR groups.
                      - Dict: Grouped search {group_name: criteria, ...}
                        Returns single DataFrame with group_column tracking membership.
+                       Use None as criteria to skip a group (match nothing).
             start_date: Optional start date filter (YYYY-MM-DD)
             end_date: Optional end date filter (YYYY-MM-DD)
             deduplicate_events: If True (default), return one row per EVENT_KEY.
@@ -1730,6 +1731,7 @@ class MaudeDatabase:
             - Searches across BRAND_NAME, GENERIC_NAME, and MANUFACTURER_D_NAME
             - Use create_search_index() first for 10-30x better performance
             - Grouped search: events only appear in first matching group (dict order)
+            - Grouped search: use None as criteria to skip a group (match nothing)
             - Warnings issued when events match multiple groups
 
         Author: Jacob Schwartz <jaschwa@umich.edu>
@@ -1920,6 +1922,7 @@ class MaudeDatabase:
             - Events only appear in first matching group (dict order)
             - Warnings issued when events match multiple groups
             - Empty groups are omitted from returned DataFrame
+            - Groups with None criteria are skipped (match nothing)
         """
         import warnings
 
@@ -1937,6 +1940,10 @@ class MaudeDatabase:
 
         # Process each group in dict order
         for group_name, group_criteria in criteria_dict.items():
+            # Skip groups with None criteria (explicit "match nothing")
+            if group_criteria is None:
+                continue
+
             # Search for this group
             group_results = self.search_by_device_names(
                 group_criteria,

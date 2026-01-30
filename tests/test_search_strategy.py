@@ -563,6 +563,51 @@ class TestDeviceSearchStrategyGrouped:
         assert loaded.broad_criteria['mechanical'] == [['argon', 'cleaner'], 'angiojet']
         assert loaded.narrow_criteria['aspiration'] == [['penumbra', 'indigo']]
 
+    def test_grouped_with_none_criteria(self):
+        """Test that None criteria is valid for grouped searches."""
+        # This should not raise - None means 'match nothing' for that group
+        strategy = DeviceSearchStrategy(
+            name="test_none",
+            description="Test None criteria",
+            broad_criteria={
+                'mechanical': [['argon', 'cleaner']],
+                'aspiration': 'penumbra'
+            },
+            narrow_criteria={
+                'mechanical': [['argon', 'cleaner', 'thromb']],
+                'aspiration': None  # Match nothing for narrow aspiration
+            }
+        )
+
+        assert strategy.broad_criteria['aspiration'] == 'penumbra'
+        assert strategy.narrow_criteria['aspiration'] is None
+
+    def test_grouped_with_none_yaml_roundtrip(self, tmp_path):
+        """Test YAML save/load preserves None criteria."""
+        strategy = DeviceSearchStrategy(
+            name="test_none_yaml",
+            description="Test None in YAML",
+            broad_criteria={
+                'group1': [['term1', 'term2']],
+                'group2': 'other'
+            },
+            narrow_criteria={
+                'group1': [['term1', 'term2', 'specific']],
+                'group2': None  # Match nothing
+            }
+        )
+
+        # Save to YAML
+        yaml_path = tmp_path / "none_strategy.yaml"
+        strategy.to_yaml(yaml_path)
+
+        # Load from YAML
+        loaded = DeviceSearchStrategy.from_yaml(yaml_path)
+
+        # Verify None is preserved (YAML stores as null)
+        assert loaded.narrow_criteria['group2'] is None
+        assert loaded.narrow_criteria['group1'] == [['term1', 'term2', 'specific']]
+
 
 class TestAdjudicationLogGrouped:
     """Test AdjudicationLog with search_group tracking."""

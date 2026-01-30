@@ -435,5 +435,84 @@ class TestEdgeCases:
             assert 'mechanical-devices' in groups or 'aspiration_devices' in groups
 
 
+# ==================== None Criteria Tests ====================
+
+class TestNoneCriteria:
+    """Tests for None criteria as 'match nothing' sentinel."""
+
+    def test_none_criteria_skips_group(self, db_with_test_data):
+        """Test that None criteria skips the group entirely."""
+        results = db_with_test_data.search_by_device_names({
+            'found': 'argon',
+            'skipped': None  # Should match nothing
+        })
+
+        # Should only have results from 'found' group
+        assert len(results) > 0
+        assert set(results['search_group'].unique()) == {'found'}
+
+    def test_none_criteria_in_multiple_groups(self, db_with_test_data):
+        """Test multiple groups with some None criteria."""
+        results = db_with_test_data.search_by_device_names({
+            'group1': 'argon',
+            'group2': None,  # Skipped
+            'group3': 'penumbra',
+            'group4': None   # Skipped
+        })
+
+        # Should only have results from group1 and group3
+        assert len(results) > 0
+        groups = set(results['search_group'].unique())
+        assert groups == {'group1', 'group3'}
+        assert 'group2' not in groups
+        assert 'group4' not in groups
+
+    def test_all_none_criteria_returns_empty(self, db_with_test_data):
+        """Test that all None criteria returns empty DataFrame."""
+        results = db_with_test_data.search_by_device_names({
+            'group1': None,
+            'group2': None
+        })
+
+        assert len(results) == 0
+        assert isinstance(results, pd.DataFrame)
+        assert 'search_group' in results.columns
+
+    def test_none_criteria_preserves_other_group_results(self, db_with_test_data):
+        """Test that None criteria doesn't affect other groups."""
+        # First get results without None
+        results_without_none = db_with_test_data.search_by_device_names({
+            'mechanical': [['argon', 'cleaner']],
+            'aspiration': 'penumbra'
+        })
+
+        # Now with None for one group
+        results_with_none = db_with_test_data.search_by_device_names({
+            'mechanical': [['argon', 'cleaner']],
+            'aspiration': None  # Skip this group
+        })
+
+        # Mechanical results should be identical
+        mech_without = set(results_without_none[
+            results_without_none['search_group'] == 'mechanical'
+        ]['MDR_REPORT_KEY'])
+        mech_with = set(results_with_none[
+            results_with_none['search_group'] == 'mechanical'
+        ]['MDR_REPORT_KEY'])
+
+        assert mech_without == mech_with
+
+    def test_none_vs_empty_string_behavior(self, db_with_test_data):
+        """Test that None is different from empty string (which would match all)."""
+        # None should return empty for that group
+        results_none = db_with_test_data.search_by_device_names({
+            'test_group': None
+        })
+        assert len(results_none) == 0
+
+        # Empty string would match everything (this is the problematic behavior we're avoiding)
+        # We just verify None doesn't do this
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

@@ -93,7 +93,9 @@ class DeviceSearchStrategy:
         - Each group's criteria can use standard list format
         - Both broad_criteria and narrow_criteria must have matching group keys
         - Output DataFrames include search_group column for group membership
+        - Use None as criteria to skip a group (match nothing for that group)
         - Example: {'mechanical': [['argon', 'cleaner']], 'aspiration': 'penumbra'}
+        - Example with None: {'g1': [['term']], 'g2': None}  # g2 matches nothing
 
     References:
         PRISMA 2020: https://www.prisma-statement.org/

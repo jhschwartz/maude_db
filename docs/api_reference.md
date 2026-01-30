@@ -584,6 +584,33 @@ results = db.search_by_device_names({
 # Cleaner XT devices only appear in 'all_argon' group, not 'cleaner_xt'
 ```
 
+**Grouped Search - None Criteria (Match Nothing)**:
+
+Use `None` as criteria to explicitly skip a group (match nothing). This is useful when broad and narrow criteria need the same group keys, but one search shouldn't match anything for certain groups.
+
+```python
+# None means "match nothing" for that group
+results = db.search_by_device_names({
+    'mechanical': [['argon', 'cleaner']],  # Normal search
+    'aspiration': None                      # Skip this group entirely
+})
+# Only 'mechanical' group will have results
+
+# Common use case: DeviceSearchStrategy with asymmetric broad/narrow
+strategy = DeviceSearchStrategy(
+    broad_criteria={
+        'mechanical': [['argon', 'cleaner']],
+        'aspiration': 'penumbra'
+    },
+    narrow_criteria={
+        'mechanical': [['argon', 'cleaner', 'thrombectomy']],
+        'aspiration': None  # All aspiration matches need review
+    }
+)
+```
+
+**Important**: Do NOT use empty string `""` to skip a group - empty string matches ALL records (since every string contains an empty string). Always use `None`.
+
 **Search Logic**:
 
 ```python
@@ -2335,6 +2362,27 @@ strategy = DeviceSearchStrategy(
 - Both `broad_criteria` and `narrow_criteria` must be dicts
 - Both must have matching group keys
 - Output DataFrames include `search_group` column
+
+**Using None Criteria (Match Nothing):**
+
+Use `None` as criteria to skip a group (match nothing). This is useful when you need matching group keys but want asymmetric search behavior:
+
+```python
+strategy = DeviceSearchStrategy(
+    name="asymmetric_search",
+    broad_criteria={
+        'mechanical': [['argon', 'cleaner']],
+        'aspiration': 'penumbra'           # Broad search includes aspiration
+    },
+    narrow_criteria={
+        'mechanical': [['argon', 'cleaner', 'thromb']],
+        'aspiration': None                  # Narrow search skips aspiration
+    }
+)
+# Result: All aspiration devices will be in needs_review (broad - narrow)
+```
+
+**Important**: Do NOT use empty string `""` - it matches all records. Always use `None` to skip a group.
 
 ---
 
